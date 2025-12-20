@@ -1,0 +1,337 @@
+00:35:46.199090 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 64, bad cksum 0 (->3cb6)!)
+    localhost.61274 > localhost.23750: Flags [S], cksum 0xfe34 (incorrect -> 0x7a39), seq 3300923306, win 65535, options [mss 16344,nop,wscale 6,nop,nop,TS val 3095962503 ecr 0,sackOK,eol], length 0
+E..@..@.@............Z\..............4....?........
+............
+00:35:46.199203 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 64, bad cksum 0 (->3cb6)!)
+    localhost.23750 > localhost.61274: Flags [S.], cksum 0xfe34 (incorrect -> 0x6db1), seq 3877066246, ack 3300923307, win 65535, options [mss 16344,nop,wscale 6,nop,nop,TS val 1852858600 ecr 3095962503,sackOK,eol], length 0
+E..@..@.@...........\..Z..V..........4....?........
+np`.........
+00:35:46.199235 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.61274 > localhost.23750: Flags [.], cksum 0xfe28 (incorrect -> 0xceb9), seq 1, ack 1, win 6380, options [nop,nop,TS val 3095962503 ecr 1852858600], length 0
+E..4..@.@............Z\.......V......(.....
+....np`.
+00:35:46.199254 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.23750 > localhost.61274: Flags [.], cksum 0xfe28 (incorrect -> 0xceb9), seq 1, ack 1, win 6380, options [nop,nop,TS val 1852858600 ecr 3095962503], length 0
+E..4..@.@...........\..Z..V..........(.....
+np`.....
+00:35:46.199565 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 142, bad cksum 0 (->3c68)!)
+    localhost.61274 > localhost.23750: Flags [P.], cksum 0xfe82 (incorrect -> 0x7b79), seq 1:91, ack 1, win 6380, options [nop,nop,TS val 3095962503 ecr 1852858600], length 90
+E.....@.@............Z\.......V............
+....np`.HEAD /_ping HTTP/1.1
+Host: 127.0.0.1:23750
+User-Agent: Docker-Client/28.0.4 (darwin)
+
+
+00:35:46.199596 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.23750 > localhost.61274: Flags [.], cksum 0xfe28 (incorrect -> 0xce60), seq 1, ack 91, win 6379, options [nop,nop,TS val 1852858600 ecr 3095962503], length 0
+E..4..@.@...........\..Z..V..........(.....
+np`.....
+00:35:46.207424 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 368, bad cksum 0 (->3b86)!)
+    localhost.23750 > localhost.61274: Flags [P.], cksum 0xff64 (incorrect -> 0x34a1), seq 1:317, ack 91, win 6379, options [nop,nop,TS val 1852858607 ecr 3095962503], length 316
+E..p..@.@...........\..Z..V..........d.....
+np`.....HTTP/1.1 200 OK
+Api-Version: 1.45
+Builder-Version: 2
+Cache-Control: no-cache, no-store, must-revalidate
+Content-Length: 0
+Content-Type: text/plain; charset=utf-8
+Docker-Experimental: false
+Ostype: linux
+Pragma: no-cache
+Server: Docker/26.1.5 (linux)
+Swarm: inactive
+Date: Fri, 19 Dec 2025 16:35:46 GMT
+
+
+00:35:46.207454 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.61274 > localhost.23750: Flags [.], cksum 0xfe28 (incorrect -> 0xcd19), seq 91, ack 317, win 6376, options [nop,nop,TS val 3095962510 ecr 1852858607], length 0
+E..4..@.@............Z\.......WC.....(.....
+....np`.
+00:35:46.208449 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 237, bad cksum 0 (->3c09)!)
+    localhost.61274 > localhost.23750: Flags [P.], cksum 0xfee1 (incorrect -> 0xea6b), seq 91:276, ack 317, win 6376, options [nop,nop,TS val 3095962512 ecr 1852858607], length 185
+E.....@.@............Z\.......WC...........
+....np`.POST /v1.45/containers/create HTTP/1.1
+Host: 127.0.0.1:23750
+User-Agent: Docker-Client/28.0.4 (darwin)
+Content-Length: 1731
+Content-Type: application/json
+Accept-Encoding: gzip
+
+
+00:35:46.208471 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.23750 > localhost.61274: Flags [.], cksum 0xfe28 (incorrect -> 0xcc5b), seq 317, ack 276, win 6377, options [nop,nop,TS val 1852858609 ecr 3095962512], length 0
+E..4..@.@...........\..Z..WC.........(.....
+np`.....
+00:35:46.208472 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 1783, bad cksum 0 (->35ff)!)
+    localhost.61274 > localhost.23750: Flags [P.], cksum 0x04ec (incorrect -> 0xb5b7), seq 276:2007, ack 317, win 6376, options [nop,nop,TS val 3095962512 ecr 1852858607], length 1731
+E.....@.@............Z\.......WC...........
+....np`.{"Hostname":"","Domainname":"","User":"","AttachStdin":true,"AttachStdout":true,"AttachStderr":true,"Tty":true,"OpenStdin":true,"StdinOnce":true,"Env":null,"Cmd":null,"Image":"hello-world","Volumes":{},"WorkingDir":"","Entrypoint":null,"OnBuild":null,"Labels":{},"HostConfig":{"Binds":null,"ContainerIDFile":"","LogConfig":{"Type":"","Config":{}},"NetworkMode":"default","PortBindings":{},"RestartPolicy":{"Name":"no","MaximumRetryCount":0},"AutoRemove":false,"VolumeDriver":"","VolumesFrom":null,"ConsoleSize":[83,176],"CapAdd":null,"CapDrop":null,"CgroupnsMode":"","Dns":[],"DnsOptions":[],"DnsSearch":[],"ExtraHosts":null,"GroupAdd":null,"IpcMode":"","Cgroup":"","Links":null,"OomScoreAdj":0,"PidMode":"","Privileged":false,"PublishAllPorts":false,"ReadonlyRootfs":false,"SecurityOpt":null,"UTSMode":"","UsernsMode":"","ShmSize":0,"Isolation":"","CpuShares":0,"Memory":0,"NanoCpus":0,"CgroupParent":"","BlkioWeight":0,"BlkioWeightDevice":[],"BlkioDeviceReadBps":[],"BlkioDeviceWriteBps":[],"BlkioDeviceReadIOps":[],"BlkioDeviceWriteIOps":[],"CpuPeriod":0,"CpuQuota":0,"CpuRealtimePeriod":0,"CpuRealtimeRuntime":0,"CpusetCpus":"","CpusetMems":"","Devices":[],"DeviceCgroupRules":null,"DeviceRequests":null,"MemoryReservation":0,"MemorySwap":0,"MemorySwappiness":-1,"OomKillDisable":false,"PidsLimit":0,"Ulimits":[],"CpuCount":0,"CpuPercent":0,"IOMaximumIOps":0,"IOMaximumBandwidth":0,"MaskedPaths":null,"ReadonlyPaths":null},"NetworkingConfig":{"EndpointsConfig":{"default":{"IPAMConfig":null,"Links":null,"Aliases":null,"MacAddress":"","DriverOpts":null,"GwPriority":0,"NetworkID":"","EndpointID":"","Gateway":"","IPAddress":"","IPPrefixLen":0,"IPv6Gateway":"","GlobalIPv6Address":"","GlobalIPv6PrefixLen":0,"DNSNames":null}}}}
+
+00:35:46.208503 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.23750 > localhost.61274: Flags [.], cksum 0xfe28 (incorrect -> 0xc5b3), seq 317, ack 2007, win 6350, options [nop,nop,TS val 1852858609 ecr 3095962512], length 0
+E..4..@.@...........\..Z..WC.........(.....
+np`.....
+00:35:46.223405 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 346, bad cksum 0 (->3b9c)!)
+    localhost.23750 > localhost.61274: Flags [P.], cksum 0xff4e (incorrect -> 0x1c1b), seq 317:611, ack 2007, win 6350, options [nop,nop,TS val 1852858624 ecr 3095962512], length 294
+E..Z..@.@...........\..Z..WC.........N.....
+npa.....HTTP/1.1 201 Created
+Api-Version: 1.45
+Content-Type: application/json
+Docker-Experimental: false
+Ostype: linux
+Server: Docker/26.1.5 (linux)
+Date: Fri, 19 Dec 2025 16:35:46 GMT
+Content-Length: 88
+
+{"Id":"eed15a6d765eb81b6532ab412243021ae1c04d4ddb969280aad3543e34cb6c4d","Warnings":[]}
+
+00:35:46.223433 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.61274 > localhost.23750: Flags [.], cksum 0xfe28 (incorrect -> 0xc459), seq 2007, ack 611, win 6372, options [nop,nop,TS val 3095962527 ecr 1852858624], length 0
+E..4..@.@............Z\.......Xi.....(.....
+....npa.
+00:35:46.223946 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 64, bad cksum 0 (->3cb6)!)
+    localhost.61276 > localhost.23750: Flags [S], cksum 0xfe34 (incorrect -> 0x3028), seq 433264433, win 65535, options [mss 16344,nop,wscale 6,nop,nop,TS val 3407251055 ecr 0,sackOK,eol], length 0
+E..@..@.@............\\....1.........4....?........
+...o........
+00:35:46.223988 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 64, bad cksum 0 (->3cb6)!)
+    localhost.23750 > localhost.61276: Flags [S.], cksum 0xfe34 (incorrect -> 0xdae5), seq 1652365367, ack 433264434, win 65535, options [mss 16344,nop,wscale 6,nop,nop,TS val 1263308592 ecr 3407251055,sackOK,eol], length 0
+E..@..@.@...........\..\b}.7...2.....4....?........
+KL.0...o....
+00:35:46.223998 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.61276 > localhost.23750: Flags [.], cksum 0xfe28 (incorrect -> 0x3bee), seq 1, ack 1, win 6380, options [nop,nop,TS val 3407251055 ecr 1263308592], length 0
+E..4..@.@............\\....2b}.8.....(.....
+...oKL.0
+00:35:46.224003 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.23750 > localhost.61276: Flags [.], cksum 0xfe28 (incorrect -> 0x3bee), seq 1, ack 1, win 6380, options [nop,nop,TS val 1263308592 ecr 3407251055], length 0
+E..4..@.@...........\..\b}.8...2.....(.....
+KL.0...o
+00:35:46.224039 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 340, bad cksum 0 (->3ba2)!)
+    localhost.61276 > localhost.23750: Flags [P.], cksum 0xff48 (incorrect -> 0xb863), seq 1:289, ack 1, win 6380, options [nop,nop,TS val 3407251055 ecr 1263308592], length 288
+E..T..@.@............\\....2b}.8.....H.....
+...oKL.0POST /v1.45/containers/eed15a6d765eb81b6532ab412243021ae1c04d4ddb969280aad3543e34cb6c4d/attach?stderr=1&stdin=1&stdout=1&stream=1 HTTP/1.1
+Host: 127.0.0.1:23750
+User-Agent: Docker-Client/28.0.4 (darwin)
+Content-Length: 0
+Connection: Upgrade
+Content-Type: text/plain
+Upgrade: tcp
+
+
+00:35:46.224053 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.23750 > localhost.61276: Flags [.], cksum 0xfe28 (incorrect -> 0x3ad2), seq 1, ack 289, win 6376, options [nop,nop,TS val 1263308592 ecr 3407251055], length 0
+E..4..@.@...........\..\b}.8...R.....(.....
+KL.0...o
+00:35:46.229398 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 161, bad cksum 0 (->3c55)!)
+    localhost.23750 > localhost.61276: Flags [P.], cksum 0xfe95 (incorrect -> 0x63f9), seq 1:110, ack 289, win 6376, options [nop,nop,TS val 1263308598 ecr 3407251055], length 109
+E.....@.@...........\..\b}.8...R...........
+KL.6...oHTTP/1.1 101 UPGRADED
+Content-Type: application/vnd.docker.raw-stream
+Connection: Upgrade
+Upgrade: tcp
+
+
+00:35:46.229422 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.61276 > localhost.23750: Flags [.], cksum 0xfe28 (incorrect -> 0x3a56), seq 289, ack 110, win 6379, options [nop,nop,TS val 3407251061 ecr 1263308598], length 0
+E..4..@.@............\\....Rb}.......(.....
+...uKL.6
+00:35:46.229561 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 285, bad cksum 0 (->3bd9)!)
+    localhost.61274 > localhost.23750: Flags [P.], cksum 0xff11 (incorrect -> 0xbed6), seq 2007:2240, ack 611, win 6372, options [nop,nop,TS val 3095962533 ecr 1852858624], length 233
+E.....@.@............Z\.......Xi...........
+....npa.POST /v1.45/containers/eed15a6d765eb81b6532ab412243021ae1c04d4ddb969280aad3543e34cb6c4d/wait?condition=next-exit HTTP/1.1
+Host: 127.0.0.1:23750
+User-Agent: Docker-Client/28.0.4 (darwin)
+Content-Length: 0
+Accept-Encoding: gzip
+
+
+00:35:46.229588 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.23750 > localhost.61274: Flags [.], cksum 0xfe28 (incorrect -> 0xc37d), seq 611, ack 2240, win 6347, options [nop,nop,TS val 1852858630 ecr 3095962533], length 0
+E..4..@.@...........\..Z..Xi.. j.....(.....
+npa.....
+00:35:46.232752 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 261, bad cksum 0 (->3bf1)!)
+    localhost.23750 > localhost.61274: Flags [P.], cksum 0xfef9 (incorrect -> 0x574c), seq 611:820, ack 2240, win 6347, options [nop,nop,TS val 1852858633 ecr 3095962533], length 209
+E.....@.@...........\..Z..Xi.. j...........
+npa	....HTTP/1.1 200 OK
+Api-Version: 1.45
+Content-Type: application/json
+Docker-Experimental: false
+Ostype: linux
+Server: Docker/26.1.5 (linux)
+Date: Fri, 19 Dec 2025 16:35:46 GMT
+Transfer-Encoding: chunked
+
+
+00:35:46.232784 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.61274 > localhost.23750: Flags [.], cksum 0xfe28 (incorrect -> 0xc290), seq 2240, ack 820, win 6369, options [nop,nop,TS val 3095962536 ecr 1852858633], length 0
+E..4..@.@............Z\... j..Y:.....(.....
+....npa	
+00:35:46.233052 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 64, bad cksum 0 (->3cb6)!)
+    localhost.61278 > localhost.23750: Flags [S], cksum 0xfe34 (incorrect -> 0x77d5), seq 1504756834, win 65535, options [mss 16344,nop,wscale 6,nop,nop,TS val 202051773 ecr 0,sackOK,eol], length 0
+E..@..@.@............^\.Y..b.........4....?........
+............
+00:35:46.233116 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 64, bad cksum 0 (->3cb6)!)
+    localhost.23750 > localhost.61278: Flags [S.], cksum 0xfe34 (incorrect -> 0x14b0), seq 847367762, ack 1504756835, win 65535, options [mss 16344,nop,wscale 6,nop,nop,TS val 3594488832 ecr 202051773,sackOK,eol], length 0
+E..@..@.@...........\..^2..RY..c.....4....?........
+.?..........
+00:35:46.233136 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.61278 > localhost.23750: Flags [.], cksum 0xfe28 (incorrect -> 0x75b8), seq 1, ack 1, win 6380, options [nop,nop,TS val 202051773 ecr 3594488832], length 0
+E..4..@.@............^\.Y..c2..S.....(.....
+.....?..
+00:35:46.233149 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.23750 > localhost.61278: Flags [.], cksum 0xfe28 (incorrect -> 0x75b8), seq 1, ack 1, win 6380, options [nop,nop,TS val 3594488832 ecr 202051773], length 0
+E..4..@.@...........\..^2..SY..c.....(.....
+.?......
+00:35:46.233171 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 266, bad cksum 0 (->3bec)!)
+    localhost.61278 > localhost.23750: Flags [P.], cksum 0xfefe (incorrect -> 0x9a9b), seq 1:215, ack 1, win 6380, options [nop,nop,TS val 202051773 ecr 3594488832], length 214
+E..
+..@.@............^\.Y..c2..S...........
+.....?..POST /v1.45/containers/eed15a6d765eb81b6532ab412243021ae1c04d4ddb969280aad3543e34cb6c4d/start HTTP/1.1
+Host: 127.0.0.1:23750
+User-Agent: Docker-Client/28.0.4 (darwin)
+Content-Length: 0
+Accept-Encoding: gzip
+
+
+00:35:46.233192 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.23750 > localhost.61278: Flags [.], cksum 0xfe28 (incorrect -> 0x74e5), seq 1, ack 215, win 6377, options [nop,nop,TS val 3594488832 ecr 202051773], length 0
+E..4..@.@...........\..^2..SY..9.....(.....
+.?......
+00:35:46.517083 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 881, bad cksum 0 (->3985)!)
+    localhost.23750 > localhost.61276: Flags [P.], cksum 0x0166 (incorrect -> 0x236a), seq 110:939, ack 289, win 6376, options [nop,nop,TS val 1263308885 ecr 3407251061], length 829
+E..q..@.@...........\..\b}.....R.....f.....
+KL.U...u
+Hello from Docker!
+This message shows that your installation appears to be working correctly.
+
+To generate this message, Docker took the following steps:
+ 1. The Docker client contacted the Docker daemon.
+ 2. The Docker daemon pulled the "hello-world" image from the Docker Hub.
+    (amd64)
+ 3. The Docker daemon created a new container from that image which runs the
+    executable that produces the output you are currently reading.
+ 4. The Docker daemon streamed that output to the Docker client, which sent it
+    to your terminal.
+
+To try something more ambitious, you can run an Ubuntu container with:
+ $ docker run -it ubuntu bash
+
+Share images, automate workflows, and more with a free Docker ID:
+ https://hub.docker.com/
+
+For more examples and ideas, visit:
+ https://docs.docker.com/get-started/
+
+
+00:35:46.517139 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.61276 > localhost.23750: Flags [.], cksum 0xfe28 (incorrect -> 0x34e7), seq 289, ack 939, win 6367, options [nop,nop,TS val 3407251348 ecr 1263308885], length 0
+E..4..@.@............\\....Rb}.......(.....
+....KL.U
+00:35:46.543896 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 209, bad cksum 0 (->3c25)!)
+    localhost.23750 > localhost.61278: Flags [P.], cksum 0xfec5 (incorrect -> 0x5fd0), seq 1:158, ack 215, win 6377, options [nop,nop,TS val 3594489143 ecr 202051773], length 157
+E.....@.@...........\..^2..SY..9...........
+.?.7....HTTP/1.1 204 No Content
+Api-Version: 1.45
+Docker-Experimental: false
+Ostype: linux
+Server: Docker/26.1.5 (linux)
+Date: Fri, 19 Dec 2025 16:35:46 GMT
+
+
+00:35:46.543953 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.61278 > localhost.23750: Flags [.], cksum 0xfe28 (incorrect -> 0x71d9), seq 215, ack 158, win 6378, options [nop,nop,TS val 202052084 ecr 3594489143], length 0
+E..4..@.@............^\.Y..92........(.....
+.....?.7
+00:35:46.544342 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 278, bad cksum 0 (->3be0)!)
+    localhost.61278 > localhost.23750: Flags [P.], cksum 0xff0a (incorrect -> 0xf127), seq 215:441, ack 158, win 6378, options [nop,nop,TS val 202052084 ecr 3594489143], length 226
+E.....@.@............^\.Y..92........
+.....
+.....?.7POST /v1.45/containers/eed15a6d765eb81b6532ab412243021ae1c04d4ddb969280aad3543e34cb6c4d/resize?h=83&w=176 HTTP/1.1
+Host: 127.0.0.1:23750
+User-Agent: Docker-Client/28.0.4 (darwin)
+Content-Length: 0
+Accept-Encoding: gzip
+
+
+00:35:46.544358 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.23750 > localhost.61278: Flags [.], cksum 0xfe28 (incorrect -> 0x70fb), seq 158, ack 441, win 6374, options [nop,nop,TS val 3594489143 ecr 202052084], length 0
+E..4..@.@...........\..^2...Y........(.....
+.?.7....
+00:35:46.566939 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.23750 > localhost.61276: Flags [F.], cksum 0xfe28 (incorrect -> 0x34ab), seq 939, ack 289, win 6376, options [nop,nop,TS val 1263308935 ecr 3407251348], length 0
+E..4..@.@...........\..\b}.....R.....(.....
+KL......
+00:35:46.566981 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.61276 > localhost.23750: Flags [.], cksum 0xfe28 (incorrect -> 0x3482), seq 289, ack 940, win 6367, options [nop,nop,TS val 3407251398 ecr 1263308935], length 0
+E..4..@.@............\\....Rb}.......(.....
+....KL..
+00:35:46.698947 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 80, bad cksum 0 (->3ca6)!)
+    localhost.23750 > localhost.61274: Flags [P.], cksum 0xfe44 (incorrect -> 0xb419), seq 820:848, ack 2240, win 6347, options [nop,nop,TS val 1852859099 ecr 3095962536], length 28
+E..P..@.@...........\..Z..Y:.. j.....D.....
+npb.....11
+{"StatusCode":0}
+
+0
+
+
+00:35:46.699000 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.61274 > localhost.23750: Flags [.], cksum 0xfe28 (incorrect -> 0xbed0), seq 2240, ack 848, win 6369, options [nop,nop,TS val 3095963002 ecr 1852859099], length 0
+E..4..@.@............Z\... j..YV.....(.....
+...znpb.
+00:35:46.704888 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 364, bad cksum 0 (->3b8a)!)
+    localhost.23750 > localhost.61278: Flags [P.], cksum 0xff60 (incorrect -> 0x26b0), seq 158:470, ack 441, win 6374, options [nop,nop,TS val 3594489304 ecr 202052084], length 312
+E..l..@.@...........\..^2...Y........`.....
+.?......HTTP/1.1 409 Conflict
+Api-Version: 1.45
+Content-Type: application/json
+Docker-Experimental: false
+Ostype: linux
+Server: Docker/26.1.5 (linux)
+Date: Fri, 19 Dec 2025 16:35:46 GMT
+Content-Length: 104
+
+{"message":"container eed15a6d765eb81b6532ab412243021ae1c04d4ddb969280aad3543e34cb6c4d is not running"}
+
+00:35:46.704917 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.61278 > localhost.23750: Flags [.], cksum 0xfe28 (incorrect -> 0x6e81), seq 441, ack 470, win 6374, options [nop,nop,TS val 202052245 ecr 3594489304], length 0
+E..4..@.@............^\.Y...2..(.....(.....
+.....?..
+00:35:46.706871 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.61276 > localhost.23750: Flags [F.], cksum 0xfe28 (incorrect -> 0x33f5), seq 289, ack 940, win 6367, options [nop,nop,TS val 3407251538 ecr 1263308935], length 0
+E..4..@.@............\\....Rb}.......(.....
+...RKL..
+00:35:46.706947 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.23750 > localhost.61276: Flags [.], cksum 0xfe28 (incorrect -> 0x3360), seq 940, ack 290, win 6376, options [nop,nop,TS val 1263309075 ecr 3407251538], length 0
+E..4..@.@...........\..\b}.....S.....(.....
+KL.....R
+00:35:46.709588 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.61278 > localhost.23750: Flags [F.], cksum 0xfe28 (incorrect -> 0x6e7b), seq 441, ack 470, win 6374, options [nop,nop,TS val 202052250 ecr 3594489304], length 0
+E..4..@.@............^\.Y...2..(.....(.....
+.....?..
+00:35:46.709597 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.61274 > localhost.23750: Flags [F.], cksum 0xfe28 (incorrect -> 0xbec4), seq 2240, ack 848, win 6369, options [nop,nop,TS val 3095963013 ecr 1852859099], length 0
+E..4..@.@............Z\... j..YV.....(.....
+....npb.
+00:35:46.709609 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.23750 > localhost.61278: Flags [.], cksum 0xfe28 (incorrect -> 0x6e76), seq 470, ack 442, win 6374, options [nop,nop,TS val 3594489309 ecr 202052250], length 0
+E..4..@.@...........\..^2..(Y........(.....
+.?......
+00:35:46.709623 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.23750 > localhost.61274: Flags [.], cksum 0xfe28 (incorrect -> 0xbecf), seq 848, ack 2241, win 6347, options [nop,nop,TS val 1852859110 ecr 3095963013], length 0
+E..4..@.@...........\..Z..YV.. k.....(.....
+npb.....
+00:35:46.709878 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.23750 > localhost.61278: Flags [F.], cksum 0xfe28 (incorrect -> 0x6e75), seq 470, ack 442, win 6374, options [nop,nop,TS val 3594489309 ecr 202052250], length 0
+E..4..@.@...........\..^2..(Y........(.....
+.?......
+00:35:46.709886 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.23750 > localhost.61274: Flags [F.], cksum 0xfe28 (incorrect -> 0xbece), seq 848, ack 2241, win 6347, options [nop,nop,TS val 1852859110 ecr 3095963013], length 0
+E..4..@.@...........\..Z..YV.. k.....(.....
+npb.....
+00:35:46.709906 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.61278 > localhost.23750: Flags [.], cksum 0xfe28 (incorrect -> 0x6e75), seq 442, ack 471, win 6374, options [nop,nop,TS val 202052250 ecr 3594489309], length 0
+E..4..@.@............^\.Y...2..).....(.....
+.....?..
+00:35:46.709917 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 52, bad cksum 0 (->3cc2)!)
+    localhost.61274 > localhost.23750: Flags [.], cksum 0xfe28 (incorrect -> 0xbeb8), seq 2241, ack 849, win 6369, options [nop,nop,TS val 3095963013 ecr 1852859110], length 0
+E..4..@.@............Z\... k..YW.....(.....
+....npb.
