@@ -22,6 +22,8 @@ var (
 	containerStopPattern = regexp.MustCompile(`^/v[\d.]+/containers/([a-f0-9]+)/stop$`)
 	// Pattern to match DELETE /containers/{id}
 	containerRemovePattern = regexp.MustCompile(`^/v[\d.]+/containers/([a-f0-9]+)$`)
+	// Pattern to match /containers/{id}/wait - long-running request that completes when container exits
+	containerWaitPattern = regexp.MustCompile(`^/v[\d.]+/containers/([a-f0-9]+)/wait`)
 )
 
 // TCPProxy implements a transparent TCP proxy that forwards connections
@@ -142,6 +144,42 @@ func (p *TCPProxy) handleConnection(clientConn net.Conn) {
 
 		// Handle container lifecycle operations AFTER receiving response
 		p.handleContainerOperationResponse(req, resp)
+
+		// Special handling for /wait endpoint - it's a long-running streaming response
+		// We need to proxy it transparently and teardown port forwards when it completes
+		if req.Method == http.MethodPost && containerWaitPattern.MatchString(req.URL.Path) {
+			matches := containerWaitPattern.FindStringSubmatch(req.URL.Path)
+			if len(matches) > 1 {
+				containerID := matches[1]
+				log.Printf("Container wait request detected for: %s (will teardown forwards when complete)", containerID)
+
+				// Write response headers to client
+				if err := resp.Write(clientConn); err != nil {
+					resp.Body.Close()
+					log.Printf("Failed to forward wait response: %v", err)
+					return
+				}
+				// Don't close resp.Body yet - let it stream
+
+				// The connection will close when the container exits and /wait completes
+				// Teardown port forwards after verifying the container actually stopped
+				defer func() {
+					log.Printf("Container wait completed (connection closed) for: %s, verifying container state...", containerID)
+
+					// Verify the container is actually stopped before tearing down port forwards
+					if p.isContainerStopped(containerID) {
+						log.Printf("Container confirmed stopped: %s, tearing down port forwards", containerID)
+						p.portForwardMgr.TeardownForwards(containerID)
+					} else {
+						log.Printf("Container still running: %s, keeping port forwards active", containerID)
+					}
+				}()
+
+				// The /wait response body continues streaming until container exits
+				// We just let it complete naturally - when it's done, the defer will run
+				return
+			}
+		}
 
 		// Write response back to client
 		if err := resp.Write(clientConn); err != nil {
@@ -493,4 +531,70 @@ func isConnectionUpgrade(resp *http.Response) bool {
 	}
 
 	return false
+}
+
+// isContainerStopped checks if a container is actually stopped by inspecting its state
+func (p *TCPProxy) isContainerStopped(containerID string) bool {
+	// Create a new connection to query container state
+	conn, err := p.sshClient.DialRemoteDocker()
+	if err != nil {
+		log.Printf("Failed to dial remote Docker for state check: %v", err)
+		return false
+	}
+	defer conn.Close()
+
+	// Build the inspect request
+	req, err := http.NewRequest("GET", fmt.Sprintf("/containers/%s/json", containerID), nil)
+	if err != nil {
+		log.Printf("Failed to create inspect request: %v", err)
+		return false
+	}
+	req.Host = "localhost"
+
+	// Send the request
+	if err := req.Write(conn); err != nil {
+		log.Printf("Failed to send inspect request: %v", err)
+		return false
+	}
+
+	// Read the response
+	reader := bufio.NewReader(conn)
+	resp, err := http.ReadResponse(reader, req)
+	if err != nil {
+		log.Printf("Failed to read inspect response: %v", err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	// Check response status
+	if resp.StatusCode != 200 {
+		log.Printf("Container inspect returned status %d (container may be removed)", resp.StatusCode)
+		return true // If container doesn't exist, consider it stopped
+	}
+
+	// Parse the response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Failed to read inspect response body: %v", err)
+		return false
+	}
+
+	// Parse JSON to get container state
+	var inspectResp struct {
+		State struct {
+			Running bool   `json:"Running"`
+			Status  string `json:"Status"`
+		} `json:"State"`
+	}
+
+	if err := json.Unmarshal(body, &inspectResp); err != nil {
+		log.Printf("Failed to parse inspect response: %v", err)
+		return false
+	}
+
+	// Container is stopped if not running
+	isStopped := !inspectResp.State.Running
+	log.Printf("Container %s state: Running=%v, Status=%s", containerID, inspectResp.State.Running, inspectResp.State.Status)
+
+	return isStopped
 }
