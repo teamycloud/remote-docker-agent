@@ -92,3 +92,19 @@ func (s *SSHClient) Close() error {
 func (s *SSHClient) Client() *ssh.Client {
 	return s.client
 }
+
+// ExecuteCommand executes a command on the remote host via SSH
+func (s *SSHClient) ExecuteCommand(command string) (string, error) {
+	session, err := s.client.NewSession()
+	if err != nil {
+		return "", fmt.Errorf("create ssh session: %w", err)
+	}
+	defer session.Close()
+
+	output, err := session.CombinedOutput(command)
+	if err != nil {
+		return string(output), fmt.Errorf("execute command: %w", err)
+	}
+
+	return string(output), nil
+}

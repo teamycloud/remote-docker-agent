@@ -9,6 +9,8 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -289,6 +291,7 @@ func (p *TCPProxy) handleContainerOperationResponse(req *http.Request, resp *htt
 			if len(matches) > 1 {
 				containerID := matches[1]
 				log.Printf("Container start detected: %s", containerID)
+
 				if err := p.portForwardMgr.SetupForwards(containerID, p.promptIdentifier); err != nil {
 					log.Printf("Failed to setup port forwards for %s: %v", containerID, err)
 				}
@@ -547,7 +550,15 @@ func (p *TCPProxy) handleContainerCreateRequest(req *http.Request) {
 
 	if len(mounts) > 0 {
 		log.Printf("Bind mounts found: %d mounts", len(mounts))
+
 		p.fileSyncMgr.StoreBindMountsStart(req, mounts)
+		parsedMounts := p.fileSyncMgr.GetMounts(req)
+		if parsedMounts != nil && len(parsedMounts.Mounts) > 0 {
+			// Create mount directories on remote host before starting
+			if err := p.createRemoteMountDirectories(parsedMounts); err != nil {
+				log.Printf("Failed to create remote mount directories: %v", err)
+			}
+		}
 
 		// Rewrite mount paths in the request body using generic map manipulation
 		// to preserve all unknown fields
@@ -851,6 +862,54 @@ func isConnectionUpgrade(resp *http.Response) bool {
 	}
 
 	return false
+}
+
+// createRemoteMountDirectories creates all mount directories on the remote host
+// It resolves original local paths and creates directories based on whether they are
+// directories or files (creating parent directory for files)
+func (p *TCPProxy) createRemoteMountDirectories(mounts *ContainerMounts) error {
+	log.Printf("Creating remote mount directories for container")
+
+	for _, mount := range mounts.Mounts {
+		// Get the original local path
+		localPath := mount.HostPath
+
+		// Determine the remote path based on the sync base path
+		// The remote path is: SyncBasePath + localPath
+		remotePath := fmt.Sprintf("%s%s", SyncBasePath, localPath)
+
+		// Check if the local path is a directory or file
+		info, err := os.Stat(localPath)
+		if err != nil {
+			log.Printf("Warning: cannot stat local path %s: %v", localPath, err)
+			continue
+		}
+		
+		var dirToCreate string
+		if info.IsDir() {
+			// If it's a directory, create it on remote
+			dirToCreate = remotePath
+			log.Printf("Local path %s is a directory, will create %s on remote", localPath, dirToCreate)
+		} else {
+			// If it's a file, create its parent directory on remote
+			dirToCreate = filepath.Dir(remotePath)
+			log.Printf("Local path %s is a file, will create parent directory %s on remote", localPath, dirToCreate)
+		}
+
+		// Execute SSH command to create the directory
+		cmd := fmt.Sprintf("mkdir -p '%s'", dirToCreate)
+		log.Printf("Executing on remote host: %s", cmd)
+
+		if output, err := p.sshClient.ExecuteCommand(cmd); err != nil {
+			log.Printf("Failed to create directory %s on remote host: %v, output: %s", dirToCreate, err, output)
+			// Continue with other mounts even if one fails
+			continue
+		}
+
+		log.Printf("Successfully created directory %s on remote host", dirToCreate)
+	}
+
+	return nil
 }
 
 // isContainerStopped checks if a container is actually stopped by inspecting its state

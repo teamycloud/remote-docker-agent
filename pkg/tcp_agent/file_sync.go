@@ -133,6 +133,17 @@ func (m *FileSyncManager) StoreBindMountsEnd(req *http.Request, containerID stri
 	delete(m.containers, req)
 }
 
+// GetMounts returns all the mounts for a container
+func (m *FileSyncManager) GetMounts(key *http.Request) *ContainerMounts {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if mounts, ok := m.containers[key]; ok {
+		return mounts
+	}
+	return nil
+}
+
 // SetupSyncs sets up file synchronization sessions for a container
 func (m *FileSyncManager) SetupSyncs(containerID string, promptIdentifier string) error {
 	m.mu.Lock()
@@ -331,12 +342,12 @@ func loadAndValidateGlobalSynchronizationConfiguration(path string) (*synchroniz
 func (m *FileSyncManager) setupSingleSync(containerID string, mount *BindMount, promptIdentifier string) (string, error) {
 	fsCreateConfiguration.help = false
 	fsCreateConfiguration.name = fmt.Sprintf("sync-%s-%s", containerID[:8], filepath.Base(mount.HostPath))
-	fsCreateConfiguration.labels = nil
+	fsCreateConfiguration.labels = []string{fmt.Sprintf("container-id=%s", compressContainerID(containerID))}
 	fsCreateConfiguration.paused = false
 	fsCreateConfiguration.noGlobalConfiguration = false
 	fsCreateConfiguration.configurationFiles = nil
-	fsCreateConfiguration.synchronizationMode = ""
-	fsCreateConfiguration.hash = "" // can be sha1|sha256
+	fsCreateConfiguration.synchronizationMode = "two-way-resolved" // local always win on conflicts
+	fsCreateConfiguration.hash = ""                                // can be sha1|sha256
 
 	fsCreateConfiguration.maximumEntryCount = 0
 	fsCreateConfiguration.maximumStagingFileSize = ""
@@ -371,7 +382,10 @@ func (m *FileSyncManager) setupSingleSync(containerID string, mount *BindMount, 
 	fsCreateConfiguration.permissionsMode = ""
 	fsCreateConfiguration.defaultFileMode = ""
 	fsCreateConfiguration.defaultFileModeAlpha = ""
-	fsCreateConfiguration.defaultFileModeBeta = ""
+	fsCreateConfiguration.defaultFileModeBeta = "644"
+	if !mount.ReadOnly {
+		fsCreateConfiguration.defaultFileModeBeta = "666"
+	}
 	fsCreateConfiguration.defaultDirectoryMode = ""
 	fsCreateConfiguration.defaultDirectoryModeAlpha = ""
 	fsCreateConfiguration.defaultDirectoryModeBeta = ""
@@ -426,7 +440,6 @@ func (m *FileSyncManager) setupSingleSync(containerID string, mount *BindMount, 
 		}
 		labels[key] = value
 	}
-	labels["container-id"] = compressContainerID(containerID)
 
 	// Create a default session configuration that will form the basis of our
 	// cumulative configuration.
