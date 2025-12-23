@@ -34,14 +34,6 @@ func NewForwardingProtocolHandler(endpoint, certPath, keyPath, caPath, sniHost s
 	}
 }
 
-// dialResult provides asynchronous agent dialing results.
-type dialResult struct {
-	// stream is the stream returned by agent dialing.
-	stream io.ReadWriteCloser
-	// error is the error returned by agent dialing.
-	error error
-}
-
 // Connect connects to a tstunnel endpoint for forwarding
 func (h *ForwardingProtocolHandler) Connect(
 	ctx context.Context,
@@ -66,7 +58,7 @@ func (h *ForwardingProtocolHandler) Connect(
 	}
 
 	// Create a channel to deliver the dialing result.
-	results := make(chan dialResult)
+	results := make(chan agentDialResult)
 
 	// Perform dialing in a background Goroutine so that we can monitor for
 	// cancellation.
@@ -76,7 +68,7 @@ func (h *ForwardingProtocolHandler) Connect(
 
 		// Transmit the result or, if cancelled, close the stream.
 		select {
-		case results <- dialResult{stream, err}:
+		case results <- agentDialResult{stream, err}:
 		case <-ctx.Done():
 			if stream != nil {
 				stream.Close()

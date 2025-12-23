@@ -33,14 +33,6 @@ func NewSyncProtocolHandler(endpoint, certPath, keyPath, caPath, sniHost string)
 	}
 }
 
-// syncDialResult provides asynchronous agent dialing results for synchronization.
-type syncDialResult struct {
-	// stream is the stream returned by agent dialing.
-	stream io.ReadWriteCloser
-	// error is the error returned by agent dialing.
-	error error
-}
-
 // Connect connects to a tstunnel endpoint for synchronization
 func (h *SyncProtocolHandler) Connect(
 	ctx context.Context,
@@ -59,7 +51,7 @@ func (h *SyncProtocolHandler) Connect(
 	}
 
 	// Create a channel to deliver the dialing result.
-	results := make(chan syncDialResult)
+	results := make(chan agentDialResult)
 
 	// Perform dialing in a background Goroutine so that we can monitor for
 	// cancellation.
@@ -69,7 +61,7 @@ func (h *SyncProtocolHandler) Connect(
 
 		// Transmit the result or, if cancelled, close the stream.
 		select {
-		case results <- syncDialResult{stream, err}:
+		case results <- agentDialResult{stream, err}:
 		case <-ctx.Done():
 			if stream != nil {
 				stream.Close()

@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sync"
 
 	"github.com/mutagen-io/mutagen/pkg/agent"
 	"github.com/mutagen-io/mutagen/pkg/logging"
@@ -160,6 +161,12 @@ func (t *Transport) Dial(command agent.Command) (io.ReadWriteCloser, error) {
 
 // Copy implements the Transport.Copy method (optional for some transports)
 func (t *Transport) Copy() agent.Transport {
+	// Clone TLS config to avoid race conditions
+	var clonedConfig *tls.Config
+	if t.tlsConfig != nil {
+		clonedConfig = t.tlsConfig.Clone()
+	}
+	
 	return &Transport{
 		endpoint:  t.endpoint,
 		certPath:  t.certPath,
@@ -167,7 +174,7 @@ func (t *Transport) Copy() agent.Transport {
 		caPath:    t.caPath,
 		sniHost:   t.sniHost,
 		logger:    t.logger,
-		tlsConfig: t.tlsConfig, // Share the TLS config
+		tlsConfig: clonedConfig,
 	}
 }
 
@@ -176,19 +183,23 @@ func (t *Transport) Copy() agent.Transport {
 type upgradedConn struct {
 	net.Conn
 	reader *bufio.Reader
+	once   sync.Once // Ensure reader is only cleared once
 }
 
 // Read reads from the buffered reader first, then from the underlying connection
 func (u *upgradedConn) Read(p []byte) (int, error) {
 	// If there's buffered data, read from it first
 	if u.reader != nil && u.reader.Buffered() > 0 {
-		return u.reader.Read(p)
+		n, err := u.reader.Read(p)
+		// Clear reader after consuming all buffered data
+		if err == nil && u.reader.Buffered() == 0 {
+			u.once.Do(func() {
+				u.reader = nil
+			})
+		}
+		return n, err
 	}
 	// Otherwise, read directly from the connection
-	// After this point, we can bypass the reader
-	if u.reader != nil {
-		u.reader = nil
-	}
 	return u.Conn.Read(p)
 }
 
