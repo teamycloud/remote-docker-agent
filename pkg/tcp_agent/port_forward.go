@@ -449,22 +449,18 @@ func (m *PortForwardManager) TeardownForwards(containerID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	containerPorts, exists := m.containerPorts[containerID]
-	if !exists {
-		return
+	if containerPorts, exists := m.containerPorts[containerID]; exists {
+		for _, binding := range containerPorts.Bindings {
+			close(binding.StopCh)
+			if binding.Listener != nil {
+				_ = binding.Listener.Close()
+				log.Printf("✗ Closed port forward: localhost:%s", binding.HostPort)
+			}
+		}
+		delete(m.containerPorts, containerID)
 	}
 
 	log.Printf("Tearing down port forwards for container %s", containerID)
-
-	for _, binding := range containerPorts.Bindings {
-		close(binding.StopCh)
-		if binding.Listener != nil {
-			binding.Listener.Close()
-			log.Printf("✗ Closed port forward: localhost:%s", binding.HostPort)
-		}
-
-	}
-
 	selected := &selection.Selection{
 		All:            false,
 		Specifications: []string{},
@@ -474,8 +470,37 @@ func (m *PortForwardManager) TeardownForwards(containerID string) {
 	if err != nil {
 		log.Printf("Error terminating port forwards: %s", err)
 	}
+}
 
-	delete(m.containerPorts, containerID)
+// ListSessions lists all existing port forward sessions and returns a map of container IDs
+func (m *PortForwardManager) ListSessions() (map[string]bool, error) {
+	// Query all port forwarding sessions from mutagen
+	sel := &selection.Selection{
+		All: true,
+	}
+
+	_, states, err := m.mutagenForwardMgr.List(context.Background(), sel, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list forwarding sessions: %w", err)
+	}
+
+	// Extract unique container IDs from session labels
+	containerIDs := make(map[string]bool)
+	for _, state := range states {
+		if state.Session.Labels != nil {
+			if compressedID, ok := state.Session.Labels["container-id"]; ok {
+				// Decompress the container ID back to full form
+				containerID := decompressContainerID(compressedID)
+				if containerID != "" {
+					containerIDs[containerID] = true
+					log.Printf("Found existing port forward session for container %s (session: %s)",
+						containerID, state.Session.Identifier)
+				}
+			}
+		}
+	}
+
+	return containerIDs, nil
 }
 
 // TeardownAll tears down all port forwards
@@ -518,4 +543,28 @@ func compressContainerID(rawContainerId string) string {
 	base64Str = strings.ReplaceAll(base64Str, "+", "_")
 	base64Str = strings.ReplaceAll(base64Str, "/", ".")
 	return fmt.Sprintf("0%s0", base64Str) // make sure the value begins and ends with a number
+}
+
+func decompressContainerID(compressedID string) string {
+	// Remove the leading and trailing '0' added during compression
+	if len(compressedID) < 2 || compressedID[0] != '0' || compressedID[len(compressedID)-1] != '0' {
+		log.Printf("Invalid compressed container ID format: %s", compressedID)
+		return ""
+	}
+	base64Str := compressedID[1 : len(compressedID)-1]
+
+	// Reverse the character replacements
+	base64Str = strings.ReplaceAll(base64Str, "-", "=")
+	base64Str = strings.ReplaceAll(base64Str, "_", "+")
+	base64Str = strings.ReplaceAll(base64Str, ".", "/")
+
+	// Decode from base64
+	bytes, err := base64.StdEncoding.DecodeString(base64Str)
+	if err != nil {
+		log.Printf("Failed to decode base64 container ID: %v", err)
+		return ""
+	}
+
+	// Encode to hex string
+	return hex.EncodeToString(bytes)
 }

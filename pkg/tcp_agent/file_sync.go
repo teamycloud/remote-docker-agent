@@ -826,9 +826,8 @@ func (m *FileSyncManager) TeardownSyncs(containerID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	_, exists := m.containerMounts[containerID]
-	if !exists {
-		return
+	if _, exists := m.containerMounts[containerID]; exists {
+		delete(m.containerMounts, containerID)
 	}
 
 	log.Printf("Tearing down file syncs for container %s", containerID)
@@ -843,7 +842,37 @@ func (m *FileSyncManager) TeardownSyncs(containerID string) {
 		log.Printf("Error terminating sync sessions: %s", err)
 	}
 
-	delete(m.containerMounts, containerID)
+}
+
+// ListSessions lists all existing file sync sessions and returns a map of container IDs
+func (m *FileSyncManager) ListSessions() (map[string]bool, error) {
+	// Query all synchronization sessions from mutagen
+	sel := &selection.Selection{
+		All: true,
+	}
+
+	_, states, err := m.mutagenSyncMgr.List(context.Background(), sel, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list sync sessions: %w", err)
+	}
+
+	// Extract unique container IDs from session labels
+	containerIDs := make(map[string]bool)
+	for _, state := range states {
+		if state.Session.Labels != nil {
+			if compressedID, ok := state.Session.Labels["container-id"]; ok {
+				// Decompress the container ID back to full form
+				containerID := decompressContainerID(compressedID)
+				if containerID != "" {
+					containerIDs[containerID] = true
+					log.Printf("Found existing file sync session for container %s (session: %s)",
+						containerID, state.Session.Identifier)
+				}
+			}
+		}
+	}
+
+	return containerIDs, nil
 }
 
 // TeardownAll tears down all file synchronization sessions

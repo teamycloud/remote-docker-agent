@@ -79,7 +79,7 @@ func NewTCPProxy(cfg Config, forwardingManager *forwarding.Manager, synchronizat
 	// Create file sync manager
 	fileSyncMgr := NewFileSyncManager(cfg, synchronizationManager)
 
-	return &TCPProxy{
+	proxy := &TCPProxy{
 		cfg:              cfg,
 		sshClient:        sshClient,
 		prompter:         prompter,
@@ -87,7 +87,12 @@ func NewTCPProxy(cfg Config, forwardingManager *forwarding.Manager, synchronizat
 		portForwardMgr:   portForwardMgr,
 		fileSyncMgr:      fileSyncMgr,
 		stopCh:           make(chan struct{}),
-	}, nil
+	}
+
+	// Start goroutine to clean up orphaned sessions from previous runs
+	go proxy.cleanupOrphanedSessions()
+
+	return proxy, nil
 }
 
 // ListenAndServe starts the TCP proxy server
@@ -392,7 +397,7 @@ func (p *TCPProxy) getContainerID(apiVersion string, containerIDOrName string) s
 		return ""
 	}
 	req.Host = "docker.example.com"
-	req.Header.Set("User-Agent", "docker-proxy")
+	req.Header.Set("User-Agent", "Docker-Client/28.0.4 (darwin) tsagent/1.0.0")
 
 	// Send the request
 	if err := req.Write(conn); err != nil {
@@ -806,18 +811,6 @@ func (p *TCPProxy) Close() error {
 
 	p.wg.Wait()
 
-	// Tear down all port forwards
-	if p.portForwardMgr != nil {
-		p.portForwardMgr.TeardownAll()
-		p.portForwardMgr = nil
-	}
-
-	// Tear down all file syncs
-	if p.fileSyncMgr != nil {
-		p.fileSyncMgr.TeardownAll()
-		p.fileSyncMgr = nil
-	}
-
 	// Close SSH connection
 	if p.sshClient != nil {
 		if err := p.sshClient.Close(); err != nil {
@@ -884,7 +877,7 @@ func (p *TCPProxy) createRemoteMountDirectories(mounts *ContainerMounts) error {
 			log.Printf("Warning: cannot stat local path %s: %v", localPath, err)
 			continue
 		}
-		
+
 		var dirToCreate string
 		if info.IsDir() {
 			// If it's a directory, create it on remote
@@ -910,6 +903,132 @@ func (p *TCPProxy) createRemoteMountDirectories(mounts *ContainerMounts) error {
 	}
 
 	return nil
+}
+
+// cleanupOrphanedSessions detects and removes port-forward and file-sync sessions
+// for containers that no longer exist or are not running on the remote host
+func (p *TCPProxy) cleanupOrphanedSessions() {
+	log.Printf("Starting cleanup of orphaned sessions from previous runs...")
+
+	// Collect all unique container IDs from both managers
+	allContainerIDs := make(map[string]bool)
+
+	// Get all existing port forward sessions
+	portForwardSessions, err := p.portForwardMgr.ListSessions()
+	if err != nil {
+		log.Printf("Failed to list port forward sessions: %v", err)
+	} else {
+		log.Printf("Found %d existing port forward sessions", len(portForwardSessions))
+		for containerID := range portForwardSessions {
+			allContainerIDs[containerID] = true
+		}
+	}
+
+	// Get all existing file sync sessions
+	fileSyncSessions, err := p.fileSyncMgr.ListSessions()
+	if err != nil {
+		log.Printf("Failed to list file sync sessions: %v", err)
+	} else {
+		log.Printf("Found %d existing file sync sessions", len(fileSyncSessions))
+		for containerID := range fileSyncSessions {
+			allContainerIDs[containerID] = true
+		}
+	}
+
+	if len(allContainerIDs) == 0 {
+		log.Printf("No existing sessions found, cleanup completed")
+		return
+	}
+
+	log.Printf("Found %d unique containers with active sessions", len(allContainerIDs))
+
+	// Check running state for all containers in a single loop
+	containersToTeardown := make([]string, 0)
+	for containerID := range allContainerIDs {
+		if !p.isContainerRunning(containerID) {
+			log.Printf("Container %s is not running, will teardown sessions", containerID)
+			containersToTeardown = append(containersToTeardown, containerID)
+		} else {
+			log.Printf("Container %s is still running, keeping sessions", containerID)
+		}
+	}
+
+	// Teardown sessions for all non-running containers
+	if len(containersToTeardown) > 0 {
+		log.Printf("Tearing down sessions for %d containers", len(containersToTeardown))
+		for _, containerID := range containersToTeardown {
+			p.portForwardMgr.TeardownForwards(containerID)
+			p.fileSyncMgr.TeardownSyncs(containerID)
+		}
+	}
+
+	log.Printf("Orphaned session cleanup completed")
+}
+
+// isContainerRunning checks if a container exists and is running on the remote host
+func (p *TCPProxy) isContainerRunning(containerID string) bool {
+	// Create a new connection to query container state
+	conn, err := p.sshClient.DialRemoteDocker()
+	if err != nil {
+		log.Printf("Failed to dial remote Docker for container check: %v", err)
+		return false
+	}
+	defer conn.Close()
+
+	// Build the inspect request
+	req, err := http.NewRequest("GET", fmt.Sprintf("/containers/%s/json", containerID), nil)
+	if err != nil {
+		log.Printf("Failed to create inspect request: %v", err)
+		return false
+	}
+	req.Host = "docker.example.com"
+	req.Header.Set("User-Agent", "Docker-Client/28.0.4 (darwin) tsagent/1.0.0")
+
+	// Send the request
+	if err := req.Write(conn); err != nil {
+		log.Printf("Failed to send inspect request: %v", err)
+		return false
+	}
+
+	// Read the response
+	reader := bufio.NewReader(conn)
+	resp, err := http.ReadResponse(reader, req)
+	if err != nil {
+		log.Printf("Failed to read inspect response: %v", err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	// Check response status
+	if resp.StatusCode != 200 {
+		log.Printf("Container %s does not exist (status %d)", containerID, resp.StatusCode)
+		return false
+	}
+
+	// Parse the response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Failed to read inspect response body: %v", err)
+		return false
+	}
+
+	// Parse JSON to get container state
+	var inspectResp struct {
+		State struct {
+			Running bool   `json:"Running"`
+			Status  string `json:"Status"`
+		} `json:"State"`
+	}
+
+	if err := json.Unmarshal(body, &inspectResp); err != nil {
+		log.Printf("Failed to parse inspect response: %v", err)
+		return false
+	}
+
+	isRunning := inspectResp.State.Running
+	log.Printf("Container %s state: Running=%v, Status=%s", containerID, inspectResp.State.Running, inspectResp.State.Status)
+
+	return isRunning
 }
 
 // isContainerStopped checks if a container is actually stopped by inspecting its state
