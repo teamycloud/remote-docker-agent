@@ -51,7 +51,18 @@ func NewMTLSClient(cfg Config) (*MTLSClient, error) {
 
 // DialRemoteDocker dials the remote Docker API via mTLS with proper SNI
 func (m *MTLSClient) DialRemoteDocker() (net.Conn, error) {
-	// Clone TLS config and set SNI for Docker API
+	return m.dial()
+}
+
+// DialTinyscaleAPI dials the Tinyscale API endpoint via mTLS with proper SNI
+// This is used for HTTP UPGRADE to create TCP tunnels for mutagen
+func (m *MTLSClient) DialTinyscaleAPI() (net.Conn, error) {
+	return m.dial()
+}
+
+// dial is the common method for establishing mTLS connections
+func (m *MTLSClient) dial() (net.Conn, error) {
+	// Clone TLS config and set SNI
 	tlsConfig := m.tlsConfig.Clone()
 	tlsConfig.ServerName = m.cfg.MTLSSNIHost
 
@@ -59,22 +70,6 @@ func (m *MTLSClient) DialRemoteDocker() (net.Conn, error) {
 	conn, err := tls.Dial("tcp", m.cfg.MTLSEndpoint, tlsConfig)
 	if err != nil {
 		return nil, fmt.Errorf("mtls dial: %w", err)
-	}
-
-	return conn, nil
-}
-
-// DialTinyscaleAPI dials the Tinyscale API endpoint via mTLS with proper SNI
-// This is used for HTTP UPGRADE to create TCP tunnels for mutagen
-func (m *MTLSClient) DialTinyscaleAPI() (net.Conn, error) {
-	// Clone TLS config and set SNI for Tinyscale API
-	tlsConfig := m.tlsConfig.Clone()
-	tlsConfig.ServerName = m.cfg.MTLSSNIHost
-
-	// Dial the mTLS endpoint
-	conn, err := tls.Dial("tcp", m.cfg.MTLSEndpoint, tlsConfig)
-	if err != nil {
-		return nil, fmt.Errorf("mtls dial tinyscale: %w", err)
 	}
 
 	return conn, nil
