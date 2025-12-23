@@ -150,3 +150,10 @@ Docker: unix:///var/run/docker.sock on remote
 
 
 
+
+
+2. mutagen 路径？使用 tinyscale（需要 fork 仓库，再改 Constant 代码）
+3. mTLS TCP transport
+4. 重构 重构，代码重构
+5. 服务器上，agent 文件被删除了？mutagen 是如何检测 agent 版本的？要搞清楚
+
