@@ -3,7 +3,6 @@ package tstunnel
 import (
 	"context"
 	"fmt"
-	"io"
 
 	"github.com/mutagen-io/mutagen/pkg/agent"
 	"github.com/mutagen-io/mutagen/pkg/forwarding"
@@ -16,21 +15,19 @@ import (
 // ForwardingProtocolHandler implements the forwarding.ProtocolHandler interface for
 // connecting to remote endpoints over mTLS with HTTP UPGRADE (tstunnel).
 type ForwardingProtocolHandler struct {
-	endpoint string
-	certPath string
-	keyPath  string
-	caPath   string
-	sniHost  string
+	config protocolHandlerConfig
 }
 
 // NewForwardingProtocolHandler creates a new forwarding protocol handler for tstunnel
 func NewForwardingProtocolHandler(endpoint, certPath, keyPath, caPath, sniHost string) *ForwardingProtocolHandler {
 	return &ForwardingProtocolHandler{
-		endpoint: endpoint,
-		certPath: certPath,
-		keyPath:  keyPath,
-		caPath:   caPath,
-		sniHost:  sniHost,
+		config: protocolHandlerConfig{
+			endpoint: endpoint,
+			certPath: certPath,
+			keyPath:  keyPath,
+			caPath:   caPath,
+			sniHost:  sniHost,
+		},
 	}
 }
 
@@ -51,41 +48,10 @@ func (h *ForwardingProtocolHandler) Connect(
 		return nil, fmt.Errorf("unable to parse target specification: %w", err)
 	}
 
-	// Create a tstunnel transport
-	transport, err := NewTransport(h.endpoint, h.certPath, h.keyPath, h.caPath, h.sniHost, logger)
+	// Dial the agent asynchronously
+	stream, err := dialAgentAsync(ctx, logger, &h.config, agent.CommandForwarder, prompter)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create tstunnel transport: %w", err)
-	}
-
-	// Create a channel to deliver the dialing result.
-	results := make(chan agentDialResult)
-
-	// Perform dialing in a background Goroutine so that we can monitor for
-	// cancellation.
-	go func() {
-		// Perform the dialing operation.
-		stream, err := agent.Dial(logger, transport, agent.CommandForwarder, prompter)
-
-		// Transmit the result or, if cancelled, close the stream.
-		select {
-		case results <- agentDialResult{stream, err}:
-		case <-ctx.Done():
-			if stream != nil {
-				stream.Close()
-			}
-		}
-	}()
-
-	// Wait for dialing results or cancellation.
-	var stream io.ReadWriteCloser
-	select {
-	case result := <-results:
-		if result.error != nil {
-			return nil, fmt.Errorf("unable to dial agent endpoint: %w", result.error)
-		}
-		stream = result.stream
-	case <-ctx.Done():
-		return nil, context.Canceled
+		return nil, err
 	}
 
 	// Create the endpoint.
