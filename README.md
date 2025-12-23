@@ -4,13 +4,13 @@ Remote Docker Agent: 可识别 Docker API 的 HTTP 代理
 
 ## 概述
 
-本项目是一个迷你代理程序，可将本地 Docker API 调用代理到远程 SSH 主机，以解决以下两个挑战：
+本项目是一个迷你代理程序，可将本地 Docker API 调用代理到远程主机（支持 SSH 或 mTLS 传输），以解决以下两个挑战：
 
 * 自动端口转发
 
 * 本地 → 远程文件同步
 
-它侦听与 Docker Engine API 兼容的本地端口，收到调用之后，会通过 SSH 将请求转发到远程 Docker  Daemon 进行处理，并通过以下方式解决上述两个问题：
+它侦听与 Docker Engine API 兼容的本地端口，收到调用之后，会通过 SSH 或 mTLS 将请求转发到远程 Docker  Daemon 进行处理，并通过以下方式解决上述两个问题：
 
 1. 自动端口转发
 
@@ -39,12 +39,12 @@ Remote Docker Agent: 可识别 Docker API 的 HTTP 代理
 
 ## 架构
 
-`pkg/tcp_agent` 包提供了一个支持 HTTP 的 TCP 代理，通过 SSH 隧道转发 Docker API 流量，并具有选择性请求拦截功能。
+`pkg/tcp_agent` 包提供了一个支持 HTTP 的 TCP 代理，通过 SSH 或 mTLS 传输转发 Docker API 流量，并具有选择性请求拦截功能。
 
 ```
 ┌─────────────┐       ┌──────────────┐       ┌─────────┐       ┌──────────────┐
-│ Docker CLI  │──TCP─→│  TCP Proxy   │──SSH─→│ Remote  │──────→│ Docker       │
-│             │       │  (HTTP-Aware)│       │ Host    │       │ Daemon       │
+│ Docker CLI  │──TCP─→│  TCP Proxy   │──SSH/│ Remote  │──────→│ Docker       │
+│             │       │  (HTTP-Aware)│  mTLS│ Host    │       │ Daemon       │
 └─────────────┘       └──────────────┘       └─────────┘       └──────────────┘
                             │
                             ├─ Parse HTTP requests
@@ -67,11 +67,13 @@ Remote Docker Agent: 可识别 Docker API 的 HTTP 代理
 
 * 解析 HostConfig.Binds → 将本地路径同步到远程临时目录并重写。
 
-对于其他请求路径 → 通过 Docker API over SSH 传递到远程。
+对于其他请求路径 → 通过 Docker API over SSH/mTLS 传递到远程。
 
 ## 功能特性
 
-- **SSH 传输**: 通过 SSH 隧道安全访问 Docker API
+- **多种传输方式**: 
+  - SSH 传输：通过 SSH 隧道安全访问 Docker API
+  - mTLS 传输：通过 mTLS 连接配合 SNI 路由访问 Docker API
 - **HTTP Keep-Alive 支持**: 在同一 TCP 连接上处理多个 HTTP 请求
 - **选择性拦截**: 解析和拦截特定的 Docker API 调用（例如容器创建）
 - **协议升级检测**: 自动切换到透明 TCP 模式以支持升级连接（attach、exec）
@@ -88,10 +90,22 @@ go build -o remote-docker-agent ./cmd/main.go
 
 # 使用 SSH 传输运行
 ./remote-docker-agent \
+  --transport ssh \
   --listen 127.0.0.1:2375 \
   --ssh-user root \
   --ssh-host remote.example.com:22 \
   --ssh-key ~/.ssh/id_rsa \
+  --remote-docker unix:///var/run/docker.sock
+
+# 使用 mTLS 传输运行
+./remote-docker-agent \
+  --transport mtls \
+  --listen 127.0.0.1:2375 \
+  --mtls-endpoint gateway.tinyscale.net:443 \
+  --mtls-cert /path/to/client-cert.pem \
+  --mtls-key /path/to/client-key.pem \
+  --mtls-ca /path/to/ca-cert.pem \
+  --mtls-sni abcdefg.containers.tinyscale.net \
   --remote-docker unix:///var/run/docker.sock
 
 # 使用代理的 Docker CLI
@@ -102,20 +116,74 @@ docker run -it hello-world
 
 ### 配置字段
 
-- **`ListenAddr`**: 本地监听地址（例如 `"127.0.0.1:2375"`）
-- **`SSHUser`**: 远程连接的 SSH 用户名（例如 `"root"`）
-- **`SSHHost`**: SSH 主机和端口（例如 `"remote.example.com:22"`）
-- **`SSHKeyPath`**: SSH 私钥路径（例如 `"/home/user/.ssh/id_rsa"`）
-- **`RemoteDocker`**: 远程 Docker socket URL：
+#### 通用配置
+
+- **`--transport`**: 传输类型：`ssh` 或 `mtls`（默认：`ssh`）
+- **`--listen`**: 本地监听地址（例如 `"127.0.0.1:2375"`）
+- **`--remote-docker`**: 远程 Docker socket URL：
     - Unix socket: `"unix:///var/run/docker.sock"`
     - TCP: `"tcp://127.0.0.1:2375"`
+- **`--log-level`**: 日志级别（例如 `"info"`, `"debug"`）
 
-你需要一个可通过 SSH 访问的远程 Docker 守护进程，通常是：
+#### SSH 传输配置
 
-SSH: user@remote-host
+- **`--ssh-user`**: 远程连接的 SSH 用户名（例如 `"root"`）
+- **`--ssh-host`**: SSH 主机和端口（例如 `"remote.example.com:22"`）
+- **`--ssh-key`**: SSH 私钥路径（例如 `"/home/user/.ssh/id_rsa"`）
 
-Docker: unix:///var/run/docker.sock on remote
+#### mTLS 传输配置
 
+- **`--mtls-endpoint`**: mTLS 网关地址（例如 `"gateway.tinyscale.net:443"`）
+- **`--mtls-cert`**: 客户端证书路径（例如 `"/path/to/client-cert.pem"`）
+- **`--mtls-key`**: 客户端私钥路径（例如 `"/path/to/client-key.pem"`）
+- **`--mtls-ca`**: CA 证书路径，可选（例如 `"/path/to/ca-cert.pem"`）
+- **`--mtls-sni`**: SNI 主机名（例如 `"abcdefg.containers.tinyscale.net"`）
+
+### 环境要求
+
+#### SSH 传输
+
+你需要一个可通过 SSH 访问的远程 Docker 守护进程：
+
+- SSH: user@remote-host
+- Docker: unix:///var/run/docker.sock on remote
+
+#### mTLS 传输
+
+你需要：
+- 一个支持 mTLS 的网关端点（例如 Tinyscale 服务）
+- 有效的客户端证书和私钥
+- 正确配置的 SNI 主机名，用于路由到特定的远程主机
+- 网关需要支持以下路由规则：
+  - 基于 SNI 的 Docker Engine API 转发（路径以 `/v1.45/` 等开头）
+  - 可选：Tinyscale API 端点（路径以 `/tinyscale/v{version}` 开头）用于 HTTP UPGRADE 到 TCP 隧道
+
+## mTLS 传输架构
+
+使用 mTLS 传输时，架构如下：
+
+```
+┌─────────────┐       ┌──────────────┐       ┌─────────────┐       ┌──────────────┐
+│ Docker CLI  │──TCP─→│  TCP Proxy   │──mTLS→│   Gateway   │──────→│ Docker       │
+│             │       │  (HTTP-Aware)│       │ (SNI-based) │       │ Daemon       │
+└─────────────┘       └──────────────┘       └─────────────┘       └──────────────┘
+                            │                       │
+                            │                       ├─ SNI: {host}.containers.domain
+                            │                       ├─ Path: /v1.45/* → Docker API
+                            │                       └─ Path: /tinyscale/* → API/Tunnel
+                            │
+                            ├─ Parse HTTP requests
+                            ├─ Intercept container operations
+                            └─ Handle Keep-Alive
+```
+
+mTLS 传输的优势：
+- 避免用户直接使用 SSH 登录到容器主机
+- 更容易实现负载均衡和流量控制
+- 可以在网关层面进行进一步的 API 解析和控制
+- 支持更灵活的认证和授权机制
+
+**注意**: 当前实现的 mTLS 传输主要用于 Docker Engine API 调用。端口转发和文件同步功能仍然依赖 SSH 传输（或需要服务器端实现相应的 Tinyscale API 端点）。
 
 ## 开发计划
 
