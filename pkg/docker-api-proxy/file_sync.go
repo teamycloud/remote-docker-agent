@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -404,14 +405,32 @@ func (m *FileSyncManager) setupSingleSync(containerID string, mount *BindMount, 
 		return "", fmt.Errorf("invalid sync source: %w", err)
 	}
 
-	// Destination: remote path via SSH
-	// user@example.org:23:relative/path
+	// Destination: remote path
 	// The path will be something like /opt/container-mount-sync/{host-path}
 	// todo: support Windows paths test long paths
 	remotePath := fmt.Sprintf("%s%s", SyncBasePath, mount.HostPath)
-	syncDest := fmt.Sprintf("%s@%s:%s",
-		m.sshConfig.SSHUser, m.sshConfig.SSHHost, remotePath)
-	beta, err := url.Parse(syncDest, url.Kind_Synchronization, true)
+
+	var beta *url.URL
+
+	// Build destination URL based on transport type
+	if m.sshConfig.TransportType == TransportTSTunnel {
+		syncDest := fmt.Sprintf("tstunnel://%s?path=%s",
+			m.sshConfig.TSTunnelServer, neturl.QueryEscape(remotePath),
+		)
+		if m.sshConfig.TSTunnelCertFile != "" && m.sshConfig.TSTunnelKeyFile != "" {
+			syncDest = syncDest + "&cert=" + neturl.QueryEscape(m.sshConfig.TSTunnelCertFile) + "&key=" + neturl.QueryEscape(m.sshConfig.TSTunnelKeyFile)
+			if m.sshConfig.TSTunnelCAFile != "" {
+				syncDest = syncDest + "&ca=" + neturl.QueryEscape(m.sshConfig.TSTunnelCAFile)
+			}
+		}
+		beta, err = ParseTSTunnelURL(syncDest, url.Kind_Synchronization)
+	} else {
+		// Default to SSH: user@host:port:path
+		syncDest := fmt.Sprintf("%s@%s:%s",
+			m.sshConfig.SSHUser, m.sshConfig.SSHHost, remotePath)
+		beta, err = url.Parse(syncDest, url.Kind_Synchronization, true)
+	}
+
 	if err != nil {
 		return "", fmt.Errorf("invalid sync destination: %w", err)
 	}

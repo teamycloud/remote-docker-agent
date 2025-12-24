@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"strings"
 	"sync"
@@ -249,16 +250,37 @@ func (m *PortForwardManager) setupSingleForward(containerID string, binding *Por
 	pfCreateConfiguration.socketPermissionModeDestination = ""
 
 	forwardSource := fmt.Sprintf("tcp:localhost:%s", binding.HostPort)
-	forwardDest := fmt.Sprintf("%s@%s:tcp:localhost:%s",
-		m.sshConfig.SSHUser, m.sshConfig.SSHHost, binding.HostPort)
+
+	var destination *url.URL
+	var err error
+
+	// Build destination URL based on transport type
+	if m.sshConfig.TransportType == TransportTSTunnel {
+		forwardDest := fmt.Sprintf("tstunnel://%s?protocol=tcp&host=localhost&port=%s",
+			m.sshConfig.TSTunnelServer,
+			binding.HostPort,
+		)
+		if m.sshConfig.TSTunnelCertFile != "" && m.sshConfig.TSTunnelKeyFile != "" {
+			forwardDest = forwardDest + "&cert=" + neturl.QueryEscape(m.sshConfig.TSTunnelCertFile) + "&key=" + neturl.QueryEscape(m.sshConfig.TSTunnelKeyFile)
+			if m.sshConfig.TSTunnelCAFile != "" {
+				forwardDest = forwardDest + "&ca=" + neturl.QueryEscape(m.sshConfig.TSTunnelCAFile)
+			}
+		}
+
+		destination, err = ParseTSTunnelURL(forwardDest, url.Kind_Forwarding)
+	} else {
+		// Default to SSH: user@host:port:tcp:localhost:<port>
+		forwardDest := fmt.Sprintf("%s@%s:tcp:localhost:%s",
+			m.sshConfig.SSHUser, m.sshConfig.SSHHost, binding.HostPort)
+		destination, err = url.Parse(forwardDest, url.Kind_Forwarding, true)
+	}
+	if err != nil {
+		return "", fmt.Errorf("invalid forwarding destination: %w", err)
+	}
 
 	source, err := url.Parse(forwardSource, url.Kind_Forwarding, true)
 	if err != nil {
 		return "", fmt.Errorf("invalid forwarding source: %w", err)
-	}
-	destination, err := url.Parse(forwardDest, url.Kind_Forwarding, true)
-	if err != nil {
-		return "", fmt.Errorf("invalid forwarding destination: %w", err)
 	}
 
 	// Validate the name.

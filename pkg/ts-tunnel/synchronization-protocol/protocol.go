@@ -15,10 +15,10 @@ import (
 	tstunneltransport "github.com/teamycloud/tsctl/pkg/ts-tunnel/agent-transport"
 )
 
-// protocolHandler implements the synchronization.ProtocolHandler interface for
+// ProtocolHandler implements the synchronization.ProtocolHandler interface for
 // connecting to remote endpoints over tstunnel (mTLS-enabled TCP). It uses
 // the agent infrastructure over a tstunnel transport.
-type protocolHandler struct{}
+type ProtocolHandler struct{}
 
 // dialResult provides asynchronous agent dialing results.
 type dialResult struct {
@@ -29,7 +29,7 @@ type dialResult struct {
 }
 
 // Connect connects to a tstunnel endpoint.
-func (h *protocolHandler) Connect(
+func (h *ProtocolHandler) Connect(
 	ctx context.Context,
 	logger *logging.Logger,
 	url *urlpkg.URL,

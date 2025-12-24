@@ -17,6 +17,8 @@ import (
 	_ "github.com/mutagen-io/mutagen/pkg/forwarding/protocols/ssh"
 	_ "github.com/mutagen-io/mutagen/pkg/synchronization/protocols/local"
 	_ "github.com/mutagen-io/mutagen/pkg/synchronization/protocols/ssh"
+
+	_ "github.com/teamycloud/tsctl/pkg/ts-tunnel"
 )
 
 func NewStartCommand() *cobra.Command {
@@ -51,11 +53,12 @@ func NewStartCommand() *cobra.Command {
 			//defer lock.Release()
 
 			cfg := docker_api_proxy.Config{
-				ListenAddr:   listenAddr,
-				SSHUser:      sshUser,
-				SSHHost:      sshHost,
-				SSHKeyPath:   sshKeyPath,
-				RemoteDocker: remoteDocker,
+				ListenAddr:    listenAddr,
+				TransportType: docker_api_proxy.TransportSSH,
+				SSHUser:       sshUser,
+				SSHHost:       sshHost,
+				SSHKeyPath:    sshKeyPath,
+				RemoteDocker:  remoteDocker,
 			}
 
 			bannerFormat := `
