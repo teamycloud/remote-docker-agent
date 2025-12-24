@@ -55,7 +55,7 @@ Example:
 			// At this point, args contains everything after "--"
 			// Cobra automatically handles the "--" delimiter
 			if len(args) == 0 {
-				return fmt.Errorf("no command specified. Usage: ts host-exec [flags] -- COMMAND [args...]")
+				return fmt.Errorf("no command specified. Usage: tsctl host-exec [flags] -- COMMAND [args...]")
 			}
 
 			command := args[0]
