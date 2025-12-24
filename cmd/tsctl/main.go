@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/teamycloud/remote-docker-agent/pkg/commands-ts"
+	"github.com/teamycloud/tsctl/pkg/commands-ts"
 )
 
 var rootCmd = &cobra.Command{

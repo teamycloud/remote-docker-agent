@@ -1,4 +1,4 @@
-module github.com/teamycloud/remote-docker-agent
+module github.com/teamycloud/tsctl
 
 go 1.24
 

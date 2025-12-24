@@ -1,10 +1,16 @@
 
-Remote Docker Agent: 可识别 Docker API 的 HTTP 代理
+tsctl: tinyscale 用户侧 CLI
 ==================
 
 ## 概述
 
-本项目是一个迷你代理程序，可将本地 Docker API 调用代理到远程 SSH 主机，以解决以下两个挑战：
+本项目包含三个部分：
+
+1. tsctl
+2. guest
+3. connector
+
+其中 `tsctl` 的关键是一个迷你代理程序，可将本地 Docker API 调用代理到远程 SSH 主机，以解决以下两个挑战：
 
 * 自动端口转发
 
@@ -84,10 +90,10 @@ Remote Docker Agent: 可识别 Docker API 的 HTTP 代理
 
 ```bash
 # 构建示例
-go build -o remote-docker-agent ./cmd/main.go
+go build -o tsctl ./cmd/main.go
 
 # 使用 SSH 传输运行
-./remote-docker-agent \
+./tsctl \
   --listen 127.0.0.1:2375 \
   --ssh-user root \
   --ssh-host remote.example.com:22 \

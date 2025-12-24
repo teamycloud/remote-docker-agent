@@ -11,7 +11,7 @@ import (
 	"github.com/mutagen-io/mutagen/pkg/logging"
 	"github.com/mutagen-io/mutagen/pkg/synchronization"
 	"github.com/spf13/cobra"
-	"github.com/teamycloud/remote-docker-agent/pkg/docker-api-proxy"
+	"github.com/teamycloud/tsctl/pkg/docker-api-proxy"
 
 	_ "github.com/mutagen-io/mutagen/pkg/forwarding/protocols/local"
 	_ "github.com/mutagen-io/mutagen/pkg/forwarding/protocols/ssh"

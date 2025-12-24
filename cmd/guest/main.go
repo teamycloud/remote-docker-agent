@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/teamycloud/remote-docker-agent/pkg/commands-guest"
+	"github.com/teamycloud/tsctl/pkg/commands-guest"
 )
 
 func main() {
