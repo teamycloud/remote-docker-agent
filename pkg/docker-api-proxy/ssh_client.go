@@ -1,4 +1,4 @@
-package tcp_agent
+package docker_api_proxy
 
 import (
 	"fmt"

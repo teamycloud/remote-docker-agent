@@ -11,7 +11,7 @@ import (
 	"github.com/mutagen-io/mutagen/pkg/logging"
 	"github.com/mutagen-io/mutagen/pkg/synchronization"
 	"github.com/spf13/cobra"
-	"github.com/teamycloud/remote-docker-agent/pkg/tcp_agent"
+	"github.com/teamycloud/remote-docker-agent/pkg/docker-api-proxy"
 
 	_ "github.com/mutagen-io/mutagen/pkg/forwarding/protocols/local"
 	_ "github.com/mutagen-io/mutagen/pkg/forwarding/protocols/ssh"
@@ -50,7 +50,7 @@ func NewStartCommand() *cobra.Command {
 			//}
 			//defer lock.Release()
 
-			cfg := tcp_agent.Config{
+			cfg := docker_api_proxy.Config{
 				ListenAddr:   listenAddr,
 				SSHUser:      sshUser,
 				SSHHost:      sshHost,
@@ -86,7 +86,7 @@ Starting TCP proxy with SSH transport...
 
 			errCh := make(chan error, 1)
 
-			proxy, err := tcp_agent.NewTCPProxy(cfg, forwardingManager, synchronizationManager)
+			proxy, err := docker_api_proxy.NewTCPProxy(cfg, forwardingManager, synchronizationManager)
 			if err != nil {
 				log.Fatalf("Failed to create TCP proxy: %v", err)
 			}
