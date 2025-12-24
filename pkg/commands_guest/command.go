@@ -96,6 +96,7 @@ func runCommand(cmdReq *CommandRequest, w http.ResponseWriter) {
 		return
 	}
 
+	log.Printf("Running command: %s %s", cmdReq.Command, strings.Join(cmdReq.Args, " "))
 	// Start the command
 	if err := cmd.Start(); err != nil {
 		log.Printf("Failed to start command: %v", err)

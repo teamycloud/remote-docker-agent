@@ -24,6 +24,13 @@ func handleCopy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Content-Length
+	contentLength := r.Header.Get("Content-Length")
+	if contentLength == "" {
+		http.Error(w, "Content-Length must be set", http.StatusBadRequest)
+		return
+	}
+
 	// Get the file path from query parameters
 	filePath := r.URL.Query().Get("path")
 	if filePath == "" {
@@ -46,6 +53,7 @@ func handleCopy(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
+	log.Printf("Receiving file: %s (%s bytes)", filePath, contentLength)
 	// Get the reader (handle gzip if needed)
 	var reader io.Reader = r.Body
 	contentEncoding := r.Header.Get("Content-Encoding")
@@ -66,7 +74,7 @@ func handleCopy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Successfully wrote %d bytes to %s", written, filePath)
+	log.Printf("  -> Successfully wrote %d bytes to %s", written, filePath)
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, "OK")
 }
