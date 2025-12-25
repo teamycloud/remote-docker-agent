@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/mutagen-io/mutagen/pkg/stream"
 )
 
 type CommandRequest struct {
@@ -128,10 +130,15 @@ func runCommand(cmdReq *CommandRequest, w http.ResponseWriter) {
 
 	// Pipe stdout to connection
 	go func() {
-		_, _ = io.Copy(conn, stdout)
+		_, err := io.Copy(conn, stdout)
+		if err == nil {
+			if closableWriter, ok := conn.(stream.CloseWriter); ok {
+				closableWriter.CloseWrite()
+			}
+		}
 	}()
 
-	// we don't pipe stderr (just ignore it)
+	// we don't pipe stderr (just ignore it), because mutagen doesn't care it
 
 	// Wait for the command to finish
 	if err := cmd.Wait(); err != nil {
