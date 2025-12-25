@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -70,6 +71,13 @@ func (p *Proxy) Start() error {
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 		ClientCAs:    p.caPool,
 		MinVersion:   tls.VersionTLS12,
+		// Validate SNI is provided
+		GetConfigForClient: func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
+			if hello.ServerName == "" {
+				return nil, errors.New("SNI is required")
+			}
+			return nil, nil
+		},
 	}
 
 	// Create TLS listener
@@ -153,12 +161,11 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 
 	p.logger.Infof("authenticated user: %s (org: %s)", identity.UserID, identity.OrgID)
 
-	// Read the connect_id from the client
-	// The client should send the connect_id as the first message
-	// Format: <connect_id>\n
-	connectID, err := p.readConnectID(tlsConn)
+	// Extract connectID from SNI
+	sni := state.ServerName
+	connectID, err := p.parseConnectIDFromSNI(sni)
 	if err != nil {
-		p.logger.Errorf("failed to read connect_id: %v", err)
+		p.logger.Errorf("failed to parse connect_id from SNI: %v", err)
 		return
 	}
 
@@ -171,7 +178,6 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	target, err := p.db.RouteConnection(ctx, identity.UserID, identity.OrgID, connectID)
 	if err != nil {
 		p.logger.Errorf("routing failed: %v", err)
-		p.sendError(tlsConn, fmt.Sprintf("routing failed: %v", err))
 		return
 	}
 
@@ -184,43 +190,26 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 	}
 }
 
-// readConnectID reads the connect_id from the client
-func (p *Proxy) readConnectID(conn net.Conn) (string, error) {
-	// Set read deadline
-	if err := conn.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil {
-		return "", err
-	}
-	defer conn.SetReadDeadline(time.Time{})
-
-	// Read until newline
-	buf := make([]byte, 256)
-	n, err := conn.Read(buf)
-	if err != nil {
-		return "", err
+// parseConnectIDFromSNI extracts connectID from SNI hostname
+// SNI format: <connectID>.connect.tinyscale.com
+// Returns the connectID (first part before the first dot)
+func (p *Proxy) parseConnectIDFromSNI(sni string) (string, error) {
+	if sni == "" {
+		return "", errors.New("SNI is empty")
 	}
 
-	// Parse connect_id
-	connectID := string(buf[:n])
-	// Remove trailing newline
-	if len(connectID) > 0 && connectID[len(connectID)-1] == '\n' {
-		connectID = connectID[:len(connectID)-1]
-	}
-	// Remove trailing carriage return
-	if len(connectID) > 0 && connectID[len(connectID)-1] == '\r' {
-		connectID = connectID[:len(connectID)-1]
+	// Split by dot and get the first part
+	parts := strings.Split(sni, ".")
+	if len(parts) == 0 {
+		return "", errors.New("invalid SNI format")
 	}
 
+	connectID := parts[0]
 	if connectID == "" {
-		return "", errors.New("empty connect_id")
+		return "", errors.New("connectID is empty")
 	}
 
 	return connectID, nil
-}
-
-// sendError sends an error message to the client
-func (p *Proxy) sendError(conn net.Conn, message string) {
-	errMsg := fmt.Sprintf("ERROR: %s\n", message)
-	conn.Write([]byte(errMsg))
 }
 
 // proxyToBackend proxies the connection to the backend server
@@ -231,11 +220,6 @@ func (p *Proxy) proxyToBackend(clientConn net.Conn, backendAddr string) error {
 		return fmt.Errorf("failed to connect to backend %s: %w", backendAddr, err)
 	}
 	defer backendConn.Close()
-
-	// Send success message to client
-	if _, err := clientConn.Write([]byte("OK\n")); err != nil {
-		return fmt.Errorf("failed to send OK to client: %w", err)
-	}
 
 	// Bidirectional copy
 	errChan := make(chan error, 2)

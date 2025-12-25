@@ -9,29 +9,36 @@ An mTLS proxy that provides certificate-based authentication and PostgreSQL-driv
    - Supports multiple CAs for certificate rotation
    - Verifies certificate expiry and signature
 
-2. **SPIFFE-Based Identity Extraction**
+2. **SNI-Based Routing**
+   - Extracts connectID from SNI hostname during TLS handshake
+   - Format: `<connectID>.connect.tinyscale.com`
+   - Example: `host-123.connect.tinyscale.com` routes to backend host `host-123`
+   - No need to send connectID in the data stream
+
+3. **SPIFFE-Based Identity Extraction**
    - Extracts user identity from certificate SAN URI
    - Format: `spiffe://tinyscale.com/orgs/<org-id>/users/<user-id>`
    - Validates issuer domain against expected issuer
 
-3. **PostgreSQL-Based Authorization**
+4. **PostgreSQL-Based Authorization**
    - Uses the same database schema as `ssh-router`
    - Implements identical authorization patterns
    - Supports user-based and team-based access control
 
-4. **Dynamic Routing**
-   - Routes connections to backend servers based on `connect_id`
+5. **Dynamic Routing**
+   - Routes connections to backend servers based on SNI-extracted connectID
    - Queries `backend_hosts` table for target addresses
    - Only routes when user is authorized to access the host
 
 ## Architecture
 
 ```
-Client (with mTLS cert) → mTLS Proxy → PostgreSQL (authorization) → Backend Server
-                             ↓
-                     Certificate Validation
-                     Identity Extraction
-                     Authorization Check
+Client (with mTLS cert + SNI) → mTLS Proxy → PostgreSQL (authorization) → Backend Server
+                                    ↓
+                          SNI Extraction (connectID)
+                          Certificate Validation
+                          Identity Extraction
+                          Authorization Check
 ```
 
 ## Database Schema
@@ -122,12 +129,14 @@ go build -o bin/connector ./cmd/connector
 
 When a client connects to the proxy:
 
-1. Client establishes mTLS connection with valid certificate
-2. Client sends `<connect_id>\n` as the first message
+1. Client establishes mTLS connection with SNI hostname in format: `<connect_id>.connect.tinyscale.com`
+   - Example: `abcdefg.connect.tinyscale.com` extracts `abcdefg` as connectID
+2. Client provides valid certificate with SPIFFE URI in SAN
 3. Proxy validates certificate and extracts user identity
-4. Proxy queries database for authorization and routing
-5. If authorized, proxy responds with `OK\n` and establishes backend connection
-6. If not authorized, proxy responds with `ERROR: <message>\n` and closes connection
+4. Proxy extracts connectID from SNI hostname
+5. Proxy queries database for authorization and routing
+6. If authorized, proxy establishes backend connection and proxies data
+7. If not authorized, proxy closes connection
 
 ### Example Client Code
 
@@ -146,10 +155,11 @@ if err != nil {
 caPool := x509.NewCertPool()
 caPool.AppendCertsFromPEM(caCert)
 
-// Configure TLS
+// Configure TLS with SNI
 tlsConfig := &tls.Config{
     Certificates: []tls.Certificate{cert},
     RootCAs:      caPool,
+    ServerName:   "connect-id-123.connect.tinyscale.com", // SNI with connectID
 }
 
 // Connect to proxy
@@ -159,25 +169,8 @@ if err != nil {
 }
 defer conn.Close()
 
-// Send connect_id
-connectID := "my-host-01"
-if _, err := fmt.Fprintf(conn, "%s\n", connectID); err != nil {
-    log.Fatal(err)
-}
-
-// Read response
-buf := make([]byte, 1024)
-n, err := conn.Read(buf)
-if err != nil {
-    log.Fatal(err)
-}
-
-response := string(buf[:n])
-if !strings.HasPrefix(response, "OK") {
-    log.Fatalf("Proxy error: %s", response)
-}
-
 // Connection established, now communicate with backend
+// The connectID was already sent via SNI
 // ...
 ```
 

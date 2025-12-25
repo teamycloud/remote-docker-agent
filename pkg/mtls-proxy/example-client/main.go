@@ -4,11 +4,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"flag"
-	"fmt"
 	"io"
 	"log"
 	"os"
-	"strings"
 )
 
 func main() {
@@ -18,7 +16,7 @@ func main() {
 		clientCert = flag.String("cert", "", "Client certificate path")
 		clientKey  = flag.String("key", "", "Client private key path")
 		caCert     = flag.String("ca", "", "CA certificate path")
-		connectID  = flag.String("connect-id", "", "Connect ID for routing")
+		sni        = flag.String("sni", "", "SNI hostname with connectID (e.g., connect-id-123.connect.tinyscale.com)")
 	)
 
 	flag.Parse()
@@ -33,8 +31,8 @@ func main() {
 	if *caCert == "" {
 		log.Fatal("--ca is required")
 	}
-	if *connectID == "" {
-		log.Fatal("--connect-id is required")
+	if *sni == "" {
+		log.Fatal("--sni is required (e.g., connect-id-123.connect.tinyscale.com)")
 	}
 
 	// Load client certificate
@@ -58,40 +56,18 @@ func main() {
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		RootCAs:      caPool,
+		ServerName:   *sni, // Set SNI with connectID
 	}
 
 	// Connect to proxy
-	log.Printf("Connecting to proxy at %s...", *proxyAddr)
+	log.Printf("Connecting to proxy at %s with SNI: %s", *proxyAddr, *sni)
 	conn, err := tls.Dial("tcp", *proxyAddr, tlsConfig)
 	if err != nil {
 		log.Fatalf("Failed to connect to proxy: %v", err)
 	}
 	defer conn.Close()
 
-	log.Printf("Connected. Sending connect_id: %s", *connectID)
-
-	// Send connect_id
-	if _, err := fmt.Fprintf(conn, "%s\n", *connectID); err != nil {
-		log.Fatalf("Failed to send connect_id: %v", err)
-	}
-
-	// Read response
-	buf := make([]byte, 1024)
-	n, err := conn.Read(buf)
-	if err != nil {
-		log.Fatalf("Failed to read response: %v", err)
-	}
-
-	response := strings.TrimSpace(string(buf[:n]))
-	log.Printf("Proxy response: %s", response)
-
-	if !strings.HasPrefix(response, "OK") {
-		log.Fatalf("Proxy returned error: %s", response)
-	}
-
-	log.Println("Connection established successfully!")
-	log.Println("You can now communicate with the backend server")
-	log.Println("Type messages to send to backend (Ctrl+C to exit)")
+	log.Println("Connected successfully!")
 
 	// Start bidirectional communication
 	go func() {
