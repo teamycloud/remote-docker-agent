@@ -2,6 +2,7 @@ package mtlsproxy
 
 import (
 	"bufio"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
@@ -18,12 +19,22 @@ const (
 // HTTPRouter handles HTTP request inspection and routing
 type HTTPRouter struct {
 	backendHost string
+	clientCert  *tls.Certificate
 }
 
 // NewHTTPRouter creates a new HTTP router
 func NewHTTPRouter(backendHost string) *HTTPRouter {
 	return &HTTPRouter{
 		backendHost: backendHost,
+		clientCert:  nil,
+	}
+}
+
+// NewHTTPRouterWithClientCert creates a new HTTP router with client certificate
+func NewHTTPRouterWithClientCert(backendHost string, clientCert *tls.Certificate) *HTTPRouter {
+	return &HTTPRouter{
+		backendHost: backendHost,
+		clientCert:  clientCert,
 	}
 }
 
@@ -48,10 +59,24 @@ func (r *HTTPRouter) RouteAndProxy(clientConn net.Conn) error {
 	targetPort := r.determinePort(path)
 	backendAddr := fmt.Sprintf("%s:%d", r.backendHost, targetPort)
 
-	// Connect to backend
-	backendConn, err := net.Dial("tcp", backendAddr)
-	if err != nil {
-		return fmt.Errorf("failed to connect to backend %s: %w", backendAddr, err)
+	// Connect to backend with or without client certificate
+	var backendConn net.Conn
+	var connErr error
+
+	if r.clientCert != nil {
+		// Use TLS with client certificate
+		tlsConfig := &tls.Config{
+			Certificates:       []tls.Certificate{*r.clientCert},
+			InsecureSkipVerify: true, // Backend is in trusted network
+		}
+		backendConn, connErr = tls.Dial("tcp", backendAddr, tlsConfig)
+	} else {
+		// Plain TCP connection
+		backendConn, connErr = net.Dial("tcp", backendAddr)
+	}
+
+	if connErr != nil {
+		return fmt.Errorf("failed to connect to backend %s: %w", backendAddr, connErr)
 	}
 	defer backendConn.Close()
 

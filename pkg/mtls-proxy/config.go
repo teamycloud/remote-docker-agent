@@ -1,6 +1,7 @@
 package mtlsproxy
 
 import (
+	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -25,6 +26,12 @@ type Config struct {
 
 	// Issuer is the expected issuer domain (e.g., "tinyscale.com")
 	Issuer string
+
+	// ClientCertPath is the path to the client certificate for backend connections
+	ClientCertPath string
+
+	// ClientKeyPath is the path to the client private key for backend connections
+	ClientKeyPath string
 
 	// Database configuration
 	Database DatabaseConfig
@@ -72,6 +79,23 @@ func (c *Config) Validate() error {
 		return errors.New("Issuer is required")
 	}
 
+	if c.ClientCertPath == "" {
+		return errors.New("ClientCertPath is required")
+	}
+
+	if c.ClientKeyPath == "" {
+		return errors.New("ClientKeyPath is required")
+	}
+
+	// Validate client certificate exists
+	if _, err := os.Stat(c.ClientCertPath); err != nil {
+		return fmt.Errorf("client certificate not found at %s: %w", c.ClientCertPath, err)
+	}
+
+	if _, err := os.Stat(c.ClientKeyPath); err != nil {
+		return fmt.Errorf("client key not found at %s: %w", c.ClientKeyPath, err)
+	}
+
 	if err := c.Database.Validate(); err != nil {
 		return fmt.Errorf("database config validation failed: %w", err)
 	}
@@ -95,6 +119,15 @@ func (c *Config) LoadCACertPool() (*x509.CertPool, error) {
 	}
 
 	return pool, nil
+}
+
+// LoadClientCertificate loads the client certificate and key for backend connections
+func (c *Config) LoadClientCertificate() (tls.Certificate, error) {
+	cert, err := tls.LoadX509KeyPair(c.ClientCertPath, c.ClientKeyPath)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("failed to load client certificate: %w", err)
+	}
+	return cert, nil
 }
 
 // Validate checks if the database configuration is valid

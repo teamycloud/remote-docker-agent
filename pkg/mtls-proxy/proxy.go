@@ -16,14 +16,15 @@ import (
 
 // Proxy represents the mTLS TCP proxy server
 type Proxy struct {
-	config   *Config
-	caPool   *x509.CertPool
-	db       *DatabaseProvider
-	logger   *logrus.Logger
-	listener net.Listener
-	wg       sync.WaitGroup
-	ctx      context.Context
-	cancel   context.CancelFunc
+	config     *Config
+	caPool     *x509.CertPool
+	db         *DatabaseProvider
+	logger     *logrus.Logger
+	listener   net.Listener
+	clientCert tls.Certificate
+	wg         sync.WaitGroup
+	ctx        context.Context
+	cancel     context.CancelFunc
 }
 
 // NewProxy creates a new mTLS proxy instance
@@ -44,15 +45,22 @@ func NewProxy(config *Config, logger *logrus.Logger) (*Proxy, error) {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
+	// Load client certificate for backend connections
+	clientCert, err := config.LoadClientCertificate()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load client certificate: %w", err)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Proxy{
-		config: config,
-		caPool: caPool,
-		db:     db,
-		logger: logger,
-		ctx:    ctx,
-		cancel: cancel,
+		config:     config,
+		caPool:     caPool,
+		db:         db,
+		logger:     logger,
+		clientCert: clientCert,
+		ctx:        ctx,
+		cancel:     cancel,
 	}, nil
 }
 
@@ -182,8 +190,8 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 
 	p.logger.Infof("routing user %s to backend %s", identity.UserID, target.BackendAddr)
 
-	// Use HTTP-aware routing
-	router := NewHTTPRouter(target.BackendAddr)
+	// Use HTTP-aware routing with client certificate
+	router := NewHTTPRouterWithClientCert(target.BackendAddr, &p.clientCert)
 	if err := router.RouteAndProxy(tlsConn); err != nil {
 		p.logger.Errorf("proxy failed: %v", err)
 		return

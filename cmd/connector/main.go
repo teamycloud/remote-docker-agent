@@ -17,6 +17,8 @@ func main() {
 		caCerts    = flag.String("ca-certs", "", "Comma-separated list of CA certificate paths")
 		serverCert = flag.String("server-cert", "", "Server certificate path")
 		serverKey  = flag.String("server-key", "", "Server private key path")
+		clientCert = flag.String("client-cert", "", "Client certificate path for backend connections")
+		clientKey  = flag.String("client-key", "", "Client private key path for backend connections")
 		issuer     = flag.String("issuer", "tinyscale.com", "Expected issuer domain")
 		dbHost     = flag.String("db-host", "127.0.0.1", "Database host")
 		dbPort     = flag.Int("db-port", 5432, "Database port")
@@ -49,6 +51,12 @@ func main() {
 	if *serverKey == "" {
 		logger.Fatal("--server-key is required")
 	}
+	if *clientCert == "" {
+		logger.Fatal("--client-cert is required")
+	}
+	if *clientKey == "" {
+		logger.Fatal("--client-key is required")
+	}
 
 	// Parse CA certificates
 	caCertPaths := parseCACertPaths(*caCerts)
@@ -62,6 +70,8 @@ func main() {
 		CACertPaths:    caCertPaths,
 		ServerCertPath: *serverCert,
 		ServerKeyPath:  *serverKey,
+		ClientCertPath: *clientCert,
+		ClientKeyPath:  *clientKey,
 		Issuer:         *issuer,
 		Database: mtlsproxy.DatabaseConfig{
 			Host:              *dbHost,

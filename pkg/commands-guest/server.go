@@ -2,6 +2,8 @@ package commands_guest
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"log"
 	"net"
@@ -90,17 +92,42 @@ func (pr *ProcessRegistry) TerminateAll() {
 	}
 }
 
+// ServerConfig holds the guest server configuration
+type ServerConfig struct {
+	Port        int
+	CACertPaths []string // Optional: paths to CA certificates for client verification
+	ServerCert  string   // Optional: server certificate path for TLS
+	ServerKey   string   // Optional: server key path for TLS
+	AllowedCNs  []string // Optional: list of allowed client certificate CNs
+	EnableMTLS  bool     // Whether to enable mTLS
+}
+
 func RunServer(port int) {
+	config := &ServerConfig{
+		Port:       port,
+		EnableMTLS: false,
+	}
+	RunServerWithConfig(config)
+}
+
+func RunServerWithConfig(config *ServerConfig) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/tinyscale/v1/host-exec/command", handleCommand)
 	mux.HandleFunc("/tinyscale/v1/host-exec/copy", handleCopy)
 
-	addr := fmt.Sprintf(":%d", port)
+	addr := fmt.Sprintf(":%d", config.Port)
 	log.Printf("Starting guest agent on %s", addr)
 
 	server := &http.Server{
 		Addr:    addr,
 		Handler: mux,
+	}
+
+	// Configure mTLS if enabled
+	if config.EnableMTLS {
+		if err := configureMTLS(server, config); err != nil {
+			log.Fatalf("Failed to configure mTLS: %v", err)
+		}
 	}
 
 	// Channel to listen for interrupt signals
@@ -109,7 +136,14 @@ func RunServer(port int) {
 
 	// Start server in a goroutine
 	go func() {
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		var err error
+		if config.EnableMTLS {
+			log.Printf("Starting server with mTLS enabled")
+			err = server.ListenAndServeTLS(config.ServerCert, config.ServerKey)
+		} else {
+			err = server.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed: %v", err)
 		}
 	}()
@@ -133,4 +167,53 @@ func RunServer(port int) {
 	} else {
 		log.Println("Server shutdown complete")
 	}
+}
+
+// configureMTLS configures mutual TLS for the server
+func configureMTLS(server *http.Server, config *ServerConfig) error {
+	// Load CA certificates
+	caPool := x509.NewCertPool()
+	for _, caPath := range config.CACertPaths {
+		caCert, err := os.ReadFile(caPath)
+		if err != nil {
+			return fmt.Errorf("failed to read CA certificate %s: %w", caPath, err)
+		}
+		if !caPool.AppendCertsFromPEM(caCert) {
+			return fmt.Errorf("failed to parse CA certificate %s", caPath)
+		}
+	}
+
+	// Create TLS config with client certificate verification
+	tlsConfig := &tls.Config{
+		ClientAuth: tls.RequireAndVerifyClientCert,
+		ClientCAs:  caPool,
+		MinVersion: tls.VersionTLS12,
+		// Verify client certificate CN against allow list
+		VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+			if len(config.AllowedCNs) == 0 {
+				// No CN restriction if allow list is empty
+				return nil
+			}
+
+			if len(verifiedChains) == 0 || len(verifiedChains[0]) == 0 {
+				return fmt.Errorf("no verified certificate chain")
+			}
+
+			clientCert := verifiedChains[0][0]
+			clientCN := clientCert.Subject.CommonName
+
+			// Check if client CN is in the allow list
+			for _, allowedCN := range config.AllowedCNs {
+				if clientCN == allowedCN {
+					log.Printf("Client authenticated with CN: %s", clientCN)
+					return nil
+				}
+			}
+
+			return fmt.Errorf("client CN '%s' is not in the allow list", clientCN)
+		},
+	}
+
+	server.TLSConfig = tlsConfig
+	return nil
 }
