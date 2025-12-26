@@ -68,9 +68,13 @@ func NewStartCommand() *cobra.Command {
 				RemoteDocker:  remoteDocker,
 			}
 
-			if tsTunnelServer != "" {
+			remoteAddr := ""
+			if cfg.SSHHost != "" {
+				remoteAddr = fmt.Sprintf("%s@%s", cfg.SSHUser, cfg.SSHHost)
+			} else if tsTunnelServer != "" {
 				cfg.TransportType = docker_api_proxy.TransportTSTunnel
 				cfg.TSTunnelServer = tsTunnelServer
+				remoteAddr = tsTunnelServer
 
 				if tsTunnelCertFile != "" && tsTunnelKeyFile != "" {
 					cfg.TSTunnelCertFile = tsTunnelCertFile
@@ -82,15 +86,16 @@ func NewStartCommand() *cobra.Command {
 					cfg.TSTunnelCAFile = tsTunnelCAFile
 				}
 				cfg.TSInsecure = tsTunnelInsecure
+			} else {
+				panic("We need to connect to remote docker daemon by either SSH or ts-tunnel")
 			}
 
 			bannerFormat := `
-Starting TCP proxy with SSH transport...
+Starting TCP proxy with %s transport...
   Listen: %s
-  SSH: %s@%s
-  Remote Docker: %s
+  Remote: %s
 `
-			logger.Infof(bannerFormat, cfg.ListenAddr, cfg.SSHUser, cfg.SSHHost, cfg.RemoteDocker)
+			logger.Infof(bannerFormat, (string)(cfg.TransportType), cfg.ListenAddr, remoteAddr)
 
 			forwardingManager, err := forwarding.NewManager(logger.Sublogger("forward"))
 			if err != nil {
@@ -138,7 +143,7 @@ Starting TCP proxy with SSH transport...
 	// Add flags to the start command
 	cmd.Flags().StringVar(&listenAddr, "listen", "127.0.0.1:2375", "Local address to listen on")
 	cmd.Flags().StringVar(&sshUser, "ssh-user", "root", "SSH username")
-	cmd.Flags().StringVar(&sshHost, "ssh-host", "remote.example.com:22", "SSH host and port")
+	cmd.Flags().StringVar(&sshHost, "ssh-host", "", "SSH host and port")
 	cmd.Flags().StringVar(&sshKeyPath, "ssh-key", os.Getenv("HOME")+"/.ssh/id_rsa", "Path to SSH private key")
 	cmd.Flags().StringVar(&remoteDocker, "remote-docker", "unix:///var/run/docker.sock", "Remote Docker socket URL")
 	cmd.Flags().StringVar(&logLevelFlag, "log-level", "info", "Log level")
@@ -147,7 +152,7 @@ Starting TCP proxy with SSH transport...
 	cmd.Flags().StringVar(&tsTunnelCertFile, "ts-cert", "", "Path to mTLS certificate")
 	cmd.Flags().StringVar(&tsTunnelKeyFile, "ts-key", "", "Path to mTLS private key")
 	cmd.Flags().StringVar(&tsTunnelCAFile, "ts-ca", "", "Path to accepted Tinyscale CA certificate")
-	cmd.Flags().BoolVar(&tsTunnelInsecure, "ts-insecure", false, "Skip tls verification when connecting to Tinyscale server")
+	cmd.Flags().BoolVar(&tsTunnelInsecure, "ts-insecure", false, "Skip tlsconfig verification when connecting to Tinyscale server")
 
 	return cmd
 }

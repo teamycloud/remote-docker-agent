@@ -16,15 +16,3 @@ DB_PWD=VeRyStr0ngPwd
     --client-cert ./../../linux-bin/connector.crt --client-key ./../../linux-bin/connector.key \
     --docker-port 32375 --host-exec-port 32090
 
-
-
-
-
-		# listenAddr = flag.String("listen", ":8443", "Listen address for the proxy")
-
-		# caCerts    = flag.String("ca-certs", "", "Comma-separated list of CA certificate paths")
-		# clientCert = flag.String("client-cert", "", "Client certificate path for backend connections")
-		# clientKey  = flag.String("client-key", "", "Client private key path for backend connections")
-		
-        # issuer     = flag.String("issuer", "tinyscale.com", "Expected issuer domain")
-

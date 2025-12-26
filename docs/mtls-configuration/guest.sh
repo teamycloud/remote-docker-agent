@@ -1,4 +1,5 @@
 
-./guest --enable-mtls --server-cert ./server.crt --server-key ./serv
-er.key --ca-certs ./ca.pem --allowed-cns 'connector'
-
+cd ~/
+./.mutagen/agents/guest --enable-mtls --allowed-cns 'connector' \
+  --server-cert ./.mutagen/agents/server.crt --server-key ./.mutagen/agents/server.key \
+   --ca-certs ./.mutagen/agents/ca.pem 

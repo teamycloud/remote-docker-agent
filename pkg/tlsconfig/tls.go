@@ -1,4 +1,4 @@
-package agent_transport
+package tlsconfig
 
 import (
 	"crypto/tls"
@@ -42,8 +42,8 @@ func (b *TLSConfigBuilder) WithServerName(serverName string) *TLSConfigBuilder {
 }
 
 // WithInsecureSkipVerify disables serverAddr certificate verification (not recommended for production).
-func (b *TLSConfigBuilder) WithInsecureSkipVerify() *TLSConfigBuilder {
-	b.insecure = true
+func (b *TLSConfigBuilder) WithInsecureSkipVerify(insecure bool) *TLSConfigBuilder {
+	b.insecure = insecure
 	return b
 }
 

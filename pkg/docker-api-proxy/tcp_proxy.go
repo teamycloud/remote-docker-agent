@@ -3,6 +3,7 @@ package docker_api_proxy
 import (
 	"bufio"
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,10 +17,14 @@ import (
 	"sync"
 
 	"github.com/mutagen-io/mutagen/cmd"
+	"github.com/mutagen-io/mutagen/pkg/agent"
 	"github.com/mutagen-io/mutagen/pkg/forwarding"
 	"github.com/mutagen-io/mutagen/pkg/identifier"
 	"github.com/mutagen-io/mutagen/pkg/prompting"
 	"github.com/mutagen-io/mutagen/pkg/synchronization"
+	"github.com/teamycloud/tsctl/pkg/tlsconfig"
+	ts_tunnel "github.com/teamycloud/tsctl/pkg/ts-tunnel"
+	tstunneltransport "github.com/teamycloud/tsctl/pkg/ts-tunnel/agent-transport"
 )
 
 var (
@@ -39,23 +44,63 @@ var (
 // TCPProxy implements a transparent TCP proxy that forwards connections
 // through an SSH tunnel to a remote Docker daemon
 type TCPProxy struct {
-	cfg              Config                  `json:"cfg"`
-	sshClient        *SSHClient              `json:"ssh_client,omitempty"`
-	portForwardMgr   *PortForwardManager     `json:"port_forward_mgr,omitempty"`
-	fileSyncMgr      *FileSyncManager        `json:"file_sync_mgr,omitempty"`
-	listener         net.Listener            `json:"listener,omitempty"`
-	wg               sync.WaitGroup          `json:"wg"`
-	prompter         *cmd.StatusLinePrompter `json:"prompter"`
-	promptIdentifier string                  `json:"promptIdentifier"`
-	stopCh           chan struct{}           `json:"stop_ch,omitempty"`
-	containerIDCache sync.Map                `json:"-"` // Cache for *http.Request -> containerID mapping
+	cfg Config `json:"cfg"`
+
+	sshClient        *SSHClient
+	tlsConfig        *tls.Config
+	tsTransport      agent.Transport
+	prompter         *cmd.StatusLinePrompter
+	promptIdentifier string
+
+	portForwardMgr *PortForwardManager
+	fileSyncMgr    *FileSyncManager
+
+	listener net.Listener
+	wg       sync.WaitGroup
+
+	stopCh           chan struct{}
+	containerIDCache sync.Map // Cache for *http.Request -> containerID mapping
 }
 
 // NewTCPProxy creates a new TCP proxy instance and establishes SSH connection
 func NewTCPProxy(cfg Config, forwardingManager *forwarding.Manager, synchronizationManager *synchronization.Manager) (*TCPProxy, error) {
-	sshClient, err := NewSSHClient(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create ssh client: %w", err)
+	var sshClient *SSHClient
+	var tlsConfig *tls.Config
+	var agentTransport agent.Transport
+
+	if cfg.TransportType == TransportSSH {
+		var err error
+		sshClient, err = NewSSHClient(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("create ssh client: %w", err)
+		}
+	} else {
+		cfgBuilder := tlsconfig.NewTLSConfigBuilder().
+			WithServerName(ts_tunnel.URLHostName(cfg.TSTunnelServer)).
+			WithClientCertificate(cfg.TSTunnelCertFile, cfg.TSTunnelKeyFile).
+			WithCACertificate(cfg.TSTunnelCAFile).
+			WithInsecureSkipVerify(cfg.TSInsecure)
+
+		tlsClientConfig, err := cfgBuilder.Build()
+		if err != nil {
+			return nil, fmt.Errorf("unable to build TLS configuration: %w", err)
+		}
+		tlsConfig = tlsClientConfig
+
+		// Create a tstunnel transport.
+		transport, err := tstunneltransport.NewTransport(tstunneltransport.TransportOptions{
+			ServerAddr: cfg.TSTunnelServer,
+			CertFile:   cfg.TSTunnelCertFile,
+			KeyFile:    cfg.TSTunnelKeyFile,
+			CAFile:     cfg.TSTunnelCAFile,
+			Insecure:   cfg.TSInsecure,
+			Prompter:   "",
+		})
+		if err != nil {
+			return nil, fmt.Errorf("unable to create tstunnel transport: %w", err)
+		}
+
+		agentTransport = transport
 	}
 
 	prompter := &cmd.StatusLinePrompter{Printer: &cmd.StatusLinePrinter{}}
@@ -76,6 +121,8 @@ func NewTCPProxy(cfg Config, forwardingManager *forwarding.Manager, synchronizat
 	proxy := &TCPProxy{
 		cfg:              cfg,
 		sshClient:        sshClient,
+		tlsConfig:        tlsConfig,
+		tsTransport:      agentTransport,
 		prompter:         prompter,
 		promptIdentifier: promptIdentifier,
 		portForwardMgr:   portForwardMgr,
@@ -131,7 +178,7 @@ func (p *TCPProxy) handleConnection(clientConn net.Conn) {
 	defer clientConn.Close()
 
 	// Establish connection to remote Docker via SSH
-	remoteConn, err := p.sshClient.DialRemoteDocker()
+	remoteConn, err := p.dailRemote()
 	if err != nil {
 		log.Printf("Failed to dial remote Docker: %v", err)
 		return
@@ -239,6 +286,15 @@ func (p *TCPProxy) handleConnection(clientConn net.Conn) {
 
 		// Continue loop to handle next request on same connection
 		log.Printf("Waiting for next request on connection from %s", clientConn.RemoteAddr())
+	}
+}
+
+func (p *TCPProxy) dailRemote() (net.Conn, error) {
+	if p.cfg.TransportType == TransportSSH {
+		return p.sshClient.DialRemoteDocker()
+	} else {
+		// Manually dial with TLS
+		return tls.Dial("tcp", p.cfg.TSTunnelServer, p.tlsConfig)
 	}
 }
 
@@ -376,7 +432,7 @@ func extractAPIVersion(path string) string {
 // getContainerID fetches the full container ID from Docker API given a name or short ID
 func (p *TCPProxy) getContainerID(apiVersion string, containerIDOrName string) string {
 	// Create a new connection to query container info
-	conn, err := p.sshClient.DialRemoteDocker()
+	conn, err := p.dailRemote()
 	if err != nil {
 		log.Printf("Failed to dial remote Docker for container ID lookup: %v", err)
 		return ""
@@ -883,17 +939,33 @@ func (p *TCPProxy) createRemoteMountDirectories(mounts *ContainerMounts) error {
 			log.Printf("Local path %s is a file, will create parent directory %s on remote", localPath, dirToCreate)
 		}
 
-		// Execute SSH command to create the directory
 		cmd := fmt.Sprintf("mkdir -p '%s'", dirToCreate)
 		log.Printf("Executing on remote host: %s", cmd)
+		if p.cfg.TransportType == TransportSSH {
+			// Execute SSH command to create the directory
 
-		if output, err := p.sshClient.ExecuteCommand(cmd); err != nil {
-			log.Printf("Failed to create directory %s on remote host: %v, output: %s", dirToCreate, err, output)
-			// Continue with other mounts even if one fails
-			continue
+			if output, err := p.sshClient.ExecuteCommand(cmd); err != nil {
+				log.Printf("Failed to create directory %s on remote host: %v, output: %s", dirToCreate, err, output)
+				// Continue with other mounts even if one fails
+				continue
+			}
+		} else {
+			agentProcess, err := p.tsTransport.Command(cmd)
+			if err != nil {
+				log.Printf("Failed to create directory %s on remote host: %v", dirToCreate, err)
+			}
+
+			if err := agentProcess.Start(); err != nil {
+				log.Printf("Failed to start creating directory %s on remote host: %v", dirToCreate, err)
+			}
+
+			if err := agentProcess.Wait(); err != nil {
+				log.Printf("Failed to await creating directory %s on remote host: %v", dirToCreate, err)
+			}
 		}
 
 		log.Printf("Successfully created directory %s on remote host", dirToCreate)
+
 	}
 
 	return nil
@@ -962,7 +1034,7 @@ func (p *TCPProxy) cleanupOrphanedSessions() {
 // isContainerRunning checks if a container exists and is running on the remote host
 func (p *TCPProxy) isContainerRunning(containerID string) bool {
 	// Create a new connection to query container state
-	conn, err := p.sshClient.DialRemoteDocker()
+	conn, err := p.dailRemote()
 	if err != nil {
 		log.Printf("Failed to dial remote Docker for container check: %v", err)
 		return false
@@ -1028,7 +1100,7 @@ func (p *TCPProxy) isContainerRunning(containerID string) bool {
 // isContainerStopped checks if a container is actually stopped by inspecting its state
 func (p *TCPProxy) isContainerStopped(containerID string) bool {
 	// Create a new connection to query container state
-	conn, err := p.sshClient.DialRemoteDocker()
+	conn, err := p.dailRemote()
 	if err != nil {
 		log.Printf("Failed to dial remote Docker for state check: %v", err)
 		return false

@@ -15,7 +15,9 @@ import (
 
 	"github.com/mutagen-io/mutagen/pkg/agent"
 	"github.com/mutagen-io/mutagen/pkg/agent/transport"
+	"github.com/teamycloud/tsctl/pkg/tlsconfig"
 	ts_tunnel "github.com/teamycloud/tsctl/pkg/ts-tunnel"
+	"github.com/teamycloud/tsctl/pkg/ts-tunnel/agent-transport/shelex"
 )
 
 const (
@@ -70,19 +72,11 @@ func NewTransport(opts TransportOptions) (agent.Transport, error) {
 	}
 
 	if ts_tunnel.UseTLS(opts.CertFile, opts.KeyFile, opts.CAFile, opts.Insecure) {
-		tlsCfgBuilder := NewTLSConfigBuilder()
-		tlsCfgBuilder.WithServerName(ts_tunnel.URLHostName(opts.ServerAddr))
-
-		if opts.CertFile != "" && opts.KeyFile != "" {
-			tlsCfgBuilder.WithClientCertificate(opts.CertFile, opts.KeyFile)
-		}
-
-		if opts.Insecure {
-			tlsCfgBuilder.WithInsecureSkipVerify()
-		}
-		if opts.CAFile != "" {
-			tlsCfgBuilder.WithCACertificate(opts.CAFile)
-		}
+		tlsCfgBuilder := tlsconfig.NewTLSConfigBuilder().
+			WithServerName(ts_tunnel.URLHostName(opts.ServerAddr)).
+			WithClientCertificate(opts.CertFile, opts.KeyFile).
+			WithCACertificate(opts.CAFile).
+			WithInsecureSkipVerify(opts.Insecure)
 
 		tlsCfg, err = tlsCfgBuilder.Build()
 		if err != nil {
@@ -164,6 +158,11 @@ func (t *tstunnelTransport) Copy(localPath, remoteName string) error {
 
 // Command implements the Command method of agent.Transport.
 func (t *tstunnelTransport) Command(command string) (*exec.Cmd, error) {
+	commandParts, err := shelex.Split(command)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse command: %w", err)
+	}
+
 	// Use the current executable with host-exec sub-command.
 	// The command will establish an upgrade connection to /tinyscale/v1/host/command
 	execPath, err := os.Executable()
@@ -193,7 +192,7 @@ func (t *tstunnelTransport) Command(command string) (*exec.Cmd, error) {
 
 	// Add the delimiter and the command to execute.
 	args = append(args, "--")
-	args = append(args, strings.Split(command, " ")...)
+	args = append(args, commandParts...)
 
 	// Create the command.
 	cmd := exec.Command(execPath, args...)
