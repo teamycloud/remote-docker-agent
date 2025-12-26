@@ -13,19 +13,20 @@ import (
 func main() {
 	// Command line flags
 	var (
-		listenAddr = flag.String("listen", ":8443", "Listen address for the proxy")
-		caCerts    = flag.String("ca-certs", "", "Comma-separated list of CA certificate paths")
-		serverCert = flag.String("server-cert", "", "Server certificate path")
-		serverKey  = flag.String("server-key", "", "Server private key path")
-		clientCert = flag.String("client-cert", "", "Client certificate path for backend connections")
-		clientKey  = flag.String("client-key", "", "Client private key path for backend connections")
-		issuer     = flag.String("issuer", "tinyscale.com", "Expected issuer domain")
-		dbHost     = flag.String("db-host", "127.0.0.1", "Database host")
-		dbPort     = flag.Int("db-port", 5432, "Database port")
-		dbUser     = flag.String("db-user", "tinyscale", "Database user")
-		dbPassword = flag.String("db-password", "tinyscale", "Database password")
-		dbName     = flag.String("db-name", "tinyscale-ssh", "Database name")
-		logLevel   = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
+		listenAddr   = flag.String("listen", ":8443", "Listen address for the proxy")
+		caCerts      = flag.String("ca-certs", "", "Comma-separated list of CA certificate paths. These CAs are used to validate client certificates.")
+		serverCert   = flag.String("server-cert", "", "Server certificate path, client will verify this certificate to authenticate us as the proxy server")
+		serverKey    = flag.String("server-key", "", "Server private key path")
+		clientCert   = flag.String("client-cert", "", "Path to client certificate used for backend connections")
+		clientKey    = flag.String("client-key", "", "Path to client private key used for backend connections")
+		dbHost       = flag.String("db-host", "127.0.0.1", "Database host")
+		dbPort       = flag.Int("db-port", 5432, "Database port")
+		dbUser       = flag.String("db-user", "tinyscale", "Database user")
+		dbPassword   = flag.String("db-password", "tinyscale", "Database password")
+		dbName       = flag.String("db-name", "tinyscale-ssh", "Database name")
+		dockerPort   = flag.Int("docker-port", 2375, "Docker Engine API port on backend hosts")
+		hostExecPort = flag.Int("host-exec-port", 2090, "Host exec port on backend hosts")
+		logLevel     = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
 	)
 
 	flag.Parse()
@@ -72,7 +73,6 @@ func main() {
 		ServerKeyPath:  *serverKey,
 		ClientCertPath: *clientCert,
 		ClientKeyPath:  *clientKey,
-		Issuer:         *issuer,
 		Database: mtlsproxy.DatabaseConfig{
 			Host:              *dbHost,
 			Port:              *dbPort,
@@ -83,6 +83,8 @@ func main() {
 			MaxOpenConns:      50,
 			MaxIdleConns:      50,
 		},
+		DockerPort:   *dockerPort,
+		HostExecPort: *hostExecPort,
 	}
 
 	// Create and start proxy

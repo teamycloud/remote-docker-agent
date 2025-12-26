@@ -24,9 +24,6 @@ type Config struct {
 	// ServerKeyPath is the path to the server private key
 	ServerKeyPath string
 
-	// Issuer is the expected issuer domain (e.g., "tinyscale.com")
-	Issuer string
-
 	// ClientCertPath is the path to the client certificate for backend connections
 	ClientCertPath string
 
@@ -35,6 +32,10 @@ type Config struct {
 
 	// Database configuration
 	Database DatabaseConfig
+
+	DockerPort int
+
+	HostExecPort int
 }
 
 // DatabaseConfig holds PostgreSQL database configuration
@@ -73,10 +74,6 @@ func (c *Config) Validate() error {
 
 	if c.ServerKeyPath == "" {
 		return errors.New("ServerKeyPath is required")
-	}
-
-	if c.Issuer == "" {
-		return errors.New("Issuer is required")
 	}
 
 	if c.ClientCertPath == "" {
@@ -170,7 +167,6 @@ func DefaultConfig() *Config {
 		CACertPaths:    []string{},
 		ServerCertPath: "",
 		ServerKeyPath:  "",
-		Issuer:         "tinyscale.com",
 		Database: DatabaseConfig{
 			Host:              "127.0.0.1",
 			Port:              5432,

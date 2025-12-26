@@ -138,6 +138,11 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 		return
 	}
 
+	if err := tlsConn.Handshake(); err != nil {
+		p.logger.Error("TLS handshake failed", "err", err)
+		return
+	}
+
 	// Get client certificate
 	state := tlsConn.ConnectionState()
 	if len(state.PeerCertificates) == 0 {
@@ -153,14 +158,8 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 		return
 	}
 
-	// Validate issuer match
-	if err := ValidateIssuerMatch(clientCert, p.caPool, p.config.Issuer); err != nil {
-		p.logger.Errorf("issuer validation failed: %v", err)
-		return
-	}
-
 	// Extract user identity
-	identity, err := ExtractUserIdentity(clientCert, p.config.Issuer)
+	identity, err := ExtractUserIdentity(clientCert)
 	if err != nil {
 		p.logger.Errorf("failed to extract user identity: %v", err)
 		return
@@ -188,10 +187,15 @@ func (p *Proxy) handleConnection(conn net.Conn) {
 		return
 	}
 
-	p.logger.Infof("routing user %s to backend %s", identity.UserID, target.BackendAddr)
+	upstreamHost, _, err := net.SplitHostPort(target.BackendAddr)
+	if err != nil {
+		p.logger.Errorf("invalid backend host address: %v", err)
+	}
+
+	p.logger.Infof("routing user %s to backend %s", identity.UserID, upstreamHost)
 
 	// Use HTTP-aware routing with client certificate
-	router := NewHTTPRouterWithClientCert(target.BackendAddr, &p.clientCert)
+	router := NewHTTPRouterWithClientCert(upstreamHost, &p.clientCert, p.config.DockerPort, p.config.HostExecPort)
 	if err := router.RouteAndProxy(tlsConn); err != nil {
 		p.logger.Errorf("proxy failed: %v", err)
 		return

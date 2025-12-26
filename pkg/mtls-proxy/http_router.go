@@ -9,32 +9,22 @@ import (
 	"strings"
 )
 
-const (
-	// Port for mutagen calls
-	MutagenPort = 2090
-	// Port for Docker Engine API
-	DockerPort = 2375
-)
 
 // HTTPRouter handles HTTP request inspection and routing
 type HTTPRouter struct {
 	backendHost string
 	clientCert  *tls.Certificate
-}
-
-// NewHTTPRouter creates a new HTTP router
-func NewHTTPRouter(backendHost string) *HTTPRouter {
-	return &HTTPRouter{
-		backendHost: backendHost,
-		clientCert:  nil,
-	}
+	dockerPort  int
+	hostExecPort int
 }
 
 // NewHTTPRouterWithClientCert creates a new HTTP router with client certificate
-func NewHTTPRouterWithClientCert(backendHost string, clientCert *tls.Certificate) *HTTPRouter {
+func NewHTTPRouterWithClientCert(backendHost string, clientCert *tls.Certificate, dockerPort, hostExecPort int) *HTTPRouter {
 	return &HTTPRouter{
 		backendHost: backendHost,
 		clientCert:  clientCert,
+		dockerPort:  dockerPort,
+		hostExecPort: hostExecPort,
 	}
 }
 
@@ -129,16 +119,16 @@ func (r *HTTPRouter) RouteAndProxy(clientConn net.Conn) error {
 func (r *HTTPRouter) determinePort(path string) int {
 	// Check for mutagen calls first (more specific prefix)
 	if strings.HasPrefix(path, "/tinyscale/v1/host-exec/") {
-		return MutagenPort
+		return r.hostExecPort
 	}
 
 	// Check for Docker Engine API
 	if strings.HasPrefix(path, "/v1/") {
-		return DockerPort
+		return r.dockerPort
 	}
 
 	// Default to Docker port for unknown paths
-	return DockerPort
+	return r.dockerPort
 }
 
 // extractPathFromRequestLine extracts the path from an HTTP request line
