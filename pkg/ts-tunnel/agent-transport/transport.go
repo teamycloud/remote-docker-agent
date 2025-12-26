@@ -15,9 +15,9 @@ import (
 
 	"github.com/mutagen-io/mutagen/pkg/agent"
 	"github.com/mutagen-io/mutagen/pkg/agent/transport"
-	"github.com/teamycloud/tsctl/pkg/tlsconfig"
 	ts_tunnel "github.com/teamycloud/tsctl/pkg/ts-tunnel"
-	"github.com/teamycloud/tsctl/pkg/ts-tunnel/agent-transport/shelex"
+	"github.com/teamycloud/tsctl/pkg/utils/shelex"
+	"github.com/teamycloud/tsctl/pkg/utils/tlsconfig"
 )
 
 const (
@@ -97,7 +97,7 @@ func NewTransport(opts TransportOptions) (agent.Transport, error) {
 
 // Copy implements the Copy method of agent.Transport.
 func (t *tstunnelTransport) Copy(localPath, remoteName string) error {
-	// Use the /copy endpoint provided by pkg/commands-guest
+	// Use the /copy endpoint provided by pkg/guest
 	// Create a context with timeout.
 	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
 	defer cancel()

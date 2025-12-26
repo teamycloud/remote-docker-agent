@@ -1,4 +1,4 @@
-package docker_api_proxy
+package docker_proxy
 
 import (
 	"bufio"
@@ -22,9 +22,9 @@ import (
 	"github.com/mutagen-io/mutagen/pkg/identifier"
 	"github.com/mutagen-io/mutagen/pkg/prompting"
 	"github.com/mutagen-io/mutagen/pkg/synchronization"
-	"github.com/teamycloud/tsctl/pkg/tlsconfig"
 	ts_tunnel "github.com/teamycloud/tsctl/pkg/ts-tunnel"
 	tstunneltransport "github.com/teamycloud/tsctl/pkg/ts-tunnel/agent-transport"
+	"github.com/teamycloud/tsctl/pkg/utils/tlsconfig"
 )
 
 var (
@@ -41,9 +41,9 @@ var (
 	containerWaitPattern = regexp.MustCompile(`^/v[\d.]+/containers/([a-f0-9]+)/wait`)
 )
 
-// TCPProxy implements a transparent TCP proxy that forwards connections
+// DockerProxy implements a transparent TCP proxy that forwards connections
 // through an SSH tunnel to a remote Docker daemon
-type TCPProxy struct {
+type DockerProxy struct {
 	cfg Config `json:"cfg"`
 
 	sshClient        *SSHClient
@@ -63,7 +63,7 @@ type TCPProxy struct {
 }
 
 // NewTCPProxy creates a new TCP proxy instance and establishes SSH connection
-func NewTCPProxy(cfg Config, forwardingManager *forwarding.Manager, synchronizationManager *synchronization.Manager) (*TCPProxy, error) {
+func NewTCPProxy(cfg Config, forwardingManager *forwarding.Manager, synchronizationManager *synchronization.Manager) (*DockerProxy, error) {
 	var sshClient *SSHClient
 	var tlsConfig *tls.Config
 	var agentTransport agent.Transport
@@ -118,7 +118,7 @@ func NewTCPProxy(cfg Config, forwardingManager *forwarding.Manager, synchronizat
 	// Create file sync manager
 	fileSyncMgr := NewFileSyncManager(cfg, synchronizationManager)
 
-	proxy := &TCPProxy{
+	proxy := &DockerProxy{
 		cfg:              cfg,
 		sshClient:        sshClient,
 		tlsConfig:        tlsConfig,
@@ -137,7 +137,7 @@ func NewTCPProxy(cfg Config, forwardingManager *forwarding.Manager, synchronizat
 }
 
 // ListenAndServe starts the TCP proxy server
-func (p *TCPProxy) ListenAndServe() error {
+func (p *DockerProxy) ListenAndServe() error {
 	listener, err := net.Listen("tcp", p.cfg.ListenAddr)
 	if err != nil {
 		return err
@@ -173,7 +173,7 @@ func (p *TCPProxy) ListenAndServe() error {
 
 // handleConnection proxies data between client and remote Docker daemon
 // with optional HTTP-level interception for specific Docker API calls
-func (p *TCPProxy) handleConnection(clientConn net.Conn) {
+func (p *DockerProxy) handleConnection(clientConn net.Conn) {
 	defer p.wg.Done()
 	defer clientConn.Close()
 
@@ -289,7 +289,7 @@ func (p *TCPProxy) handleConnection(clientConn net.Conn) {
 	}
 }
 
-func (p *TCPProxy) dailRemote() (net.Conn, error) {
+func (p *DockerProxy) dailRemote() (net.Conn, error) {
 	if p.cfg.TransportType == TransportSSH {
 		return p.sshClient.DialRemoteDocker()
 	} else {
@@ -299,7 +299,7 @@ func (p *TCPProxy) dailRemote() (net.Conn, error) {
 }
 
 // handleContainerOperation handles container operations BEFORE forwarding the request
-func (p *TCPProxy) handleContainerOperation(req *http.Request) {
+func (p *DockerProxy) handleContainerOperation(req *http.Request) {
 	// Handle container create - extract port bindings
 	if req.Method == http.MethodPost && containerCreatePattern.MatchString(req.URL.Path) {
 		p.handleContainerCreateRequest(req)
@@ -333,7 +333,7 @@ func (p *TCPProxy) handleContainerOperation(req *http.Request) {
 }
 
 // handleContainerOperationResponse handles container operations AFTER receiving the response
-func (p *TCPProxy) handleContainerOperationResponse(req *http.Request, resp *http.Response) {
+func (p *DockerProxy) handleContainerOperationResponse(req *http.Request, resp *http.Response) {
 	// Handle container create - extract port bindings
 	if req.Method == http.MethodPost && containerCreatePattern.MatchString(req.URL.Path) {
 		p.handleContainerCreateResponse(req, resp)
@@ -396,7 +396,7 @@ func (p *TCPProxy) handleContainerOperationResponse(req *http.Request, resp *htt
 	}
 }
 
-func (p *TCPProxy) teardownForContainer(apiVersion string, containerIDOrName string) {
+func (p *DockerProxy) teardownForContainer(apiVersion string, containerIDOrName string) {
 	// If it's already a full container ID, teardown directly
 	if fullContainerIDPattern.MatchString(containerIDOrName) {
 		p.portForwardMgr.TeardownForwards(containerIDOrName)
@@ -430,7 +430,7 @@ func extractAPIVersion(path string) string {
 }
 
 // getContainerID fetches the full container ID from Docker API given a name or short ID
-func (p *TCPProxy) getContainerID(apiVersion string, containerIDOrName string) string {
+func (p *DockerProxy) getContainerID(apiVersion string, containerIDOrName string) string {
 	// Create a new connection to query container info
 	conn, err := p.dailRemote()
 	if err != nil {
@@ -520,7 +520,7 @@ func rewriteBindMount(bind string, basePath string) string {
 }
 
 // handleContainerCreate extracts port bindings from container create request and stores them
-func (p *TCPProxy) handleContainerCreateRequest(req *http.Request) {
+func (p *DockerProxy) handleContainerCreateRequest(req *http.Request) {
 	var originalReqBody []byte
 	var replacedReqBody []byte
 
@@ -707,7 +707,7 @@ func dumpContainerResponseAndWrite(resp *http.Response) (*ContainerResponse, err
 	// empty response body
 	return nil, nil
 }
-func (p *TCPProxy) handleContainerCreateResponse(req *http.Request, resp *http.Response) {
+func (p *DockerProxy) handleContainerCreateResponse(req *http.Request, resp *http.Response) {
 	if resp.StatusCode != 201 {
 		log.Printf("Container create detected with unexpected status code: %d", resp.StatusCode)
 		p.portForwardMgr.StorePortBindingsEnd(req, "")
@@ -738,7 +738,7 @@ func (p *TCPProxy) handleContainerCreateResponse(req *http.Request, resp *http.R
 }
 
 // transparentProxyWithReaders handles bidirectional copying with buffered readers
-func (p *TCPProxy) transparentProxyWithReaders(clientConn net.Conn, remoteConn net.Conn, clientReader *bufio.Reader, remoteReader *bufio.Reader) {
+func (p *DockerProxy) transparentProxyWithReaders(clientConn net.Conn, remoteConn net.Conn, clientReader *bufio.Reader, remoteReader *bufio.Reader) {
 	errCh := make(chan error, 2)
 
 	// Client -> Remote
@@ -805,7 +805,7 @@ func (p *TCPProxy) transparentProxyWithReaders(clientConn net.Conn, remoteConn n
 }
 
 // transparentProxy handles bidirectional copying between client and remote
-func (p *TCPProxy) transparentProxy(clientConn net.Conn, remoteConn net.Conn, clientReader *bufio.Reader) {
+func (p *DockerProxy) transparentProxy(clientConn net.Conn, remoteConn net.Conn, clientReader *bufio.Reader) {
 	errCh := make(chan error, 2)
 
 	// Client -> Remote
@@ -851,7 +851,7 @@ func (p *TCPProxy) transparentProxy(clientConn net.Conn, remoteConn net.Conn, cl
 }
 
 // Close gracefully shuts down the proxy
-func (p *TCPProxy) Close() error {
+func (p *DockerProxy) Close() error {
 	close(p.stopCh)
 
 	if p.listener != nil {
@@ -910,7 +910,7 @@ func isConnectionUpgrade(resp *http.Response) bool {
 // createRemoteMountDirectories creates all mount directories on the remote host
 // It resolves original local paths and creates directories based on whether they are
 // directories or files (creating parent directory for files)
-func (p *TCPProxy) createRemoteMountDirectories(mounts *ContainerMounts) error {
+func (p *DockerProxy) createRemoteMountDirectories(mounts *ContainerMounts) error {
 	log.Printf("Creating remote mount directories for container")
 
 	for _, mount := range mounts.Mounts {
@@ -973,7 +973,7 @@ func (p *TCPProxy) createRemoteMountDirectories(mounts *ContainerMounts) error {
 
 // cleanupOrphanedSessions detects and removes port-forward and file-sync sessions
 // for containers that no longer exist or are not running on the remote host
-func (p *TCPProxy) cleanupOrphanedSessions() {
+func (p *DockerProxy) cleanupOrphanedSessions() {
 	log.Printf("Starting cleanup of orphaned sessions from previous runs...")
 
 	// Collect all unique container IDs from both managers
@@ -1032,7 +1032,7 @@ func (p *TCPProxy) cleanupOrphanedSessions() {
 }
 
 // isContainerRunning checks if a container exists and is running on the remote host
-func (p *TCPProxy) isContainerRunning(containerID string) bool {
+func (p *DockerProxy) isContainerRunning(containerID string) bool {
 	// Create a new connection to query container state
 	conn, err := p.dailRemote()
 	if err != nil {
@@ -1098,7 +1098,7 @@ func (p *TCPProxy) isContainerRunning(containerID string) bool {
 }
 
 // isContainerStopped checks if a container is actually stopped by inspecting its state
-func (p *TCPProxy) isContainerStopped(containerID string) bool {
+func (p *DockerProxy) isContainerStopped(containerID string) bool {
 	// Create a new connection to query container state
 	conn, err := p.dailRemote()
 	if err != nil {

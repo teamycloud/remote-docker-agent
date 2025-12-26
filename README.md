@@ -78,14 +78,14 @@ tsctl: tinyscale 用户侧 CLI
 - 远程主机上的 agent 服务
 - 监听 HTTP 请求，提供命令执行和文件拷贝功能
 
-**pkg/commands-guest/**
+**pkg/guest/**
 - `server.go` - HTTP 服务器，优雅停机
 - `command.go` - 命令执行处理（HTTP UPGRADE 到 TCP）
 - `copy.go` - 文件拷贝处理（支持 gzip 压缩）
 
 支持的端点：
-- `/tinyscale/v1/host/command` - 命令执行
-- `/tinyscale/v1/host/copy` - 文件上传
+- `/tinyscale/v1/host-exec/command` - 命令执行
+- `/tinyscale/v1/host-exec/copy` - 文件上传
 
 ## 功能特性
 
@@ -323,15 +323,15 @@ tsctl/
 │   └── connector/
 │       └── main.go              # mTLS 连接器（计划中）
 ├── pkg/
-│   ├── commands-tsctl/
+│   ├── tsctl/
 │   │   ├── start.go             # start 子命令实现
 │   │   └── host_exec.go         # host-exec 子命令实现
-│   ├── commands-guest/
+│   ├── guest/
 │   │   ├── server.go            # HTTP 服务器
 │   │   ├── command.go           # 命令执行处理
 │   │   └── copy.go              # 文件拷贝处理
-│   ├── docker-api-proxy/
-│   │   ├── tcp_proxy.go         # TCP 代理核心
+│   ├── docker-proxy/
+│   │   ├── proxy.go             # 代理核心
 │   │   ├── port_forward.go      # 端口转发管理
 │   │   ├── file_sync.go         # 文件同步管理
 │   │   ├── ssh_client.go        # SSH 客户端
@@ -360,11 +360,11 @@ tsctl/
 - ✅ 自动文件同步（基于 Mutagen）
 - ✅ TS-Tunnel (mTLS) 传输协议
 - ✅ Guest agent 服务
+- ✅ 服务端 mTLS connector 组件
 - ✅ 容器生命周期管理
 - ✅ 连接升级支持（attach, exec）
 - ✅ 优雅停机
 
 ### 进行中
-- 🔄 服务端 mTLS connector 组件
 - 🔄 客户端 daemon 及 CLI 组件（二者需通信，需跨平台）
 

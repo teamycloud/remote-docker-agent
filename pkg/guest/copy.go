@@ -1,4 +1,4 @@
-package commands_guest
+package guest
 
 import (
 	"compress/gzip"

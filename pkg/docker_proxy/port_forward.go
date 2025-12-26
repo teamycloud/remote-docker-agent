@@ -1,4 +1,4 @@
-package docker_api_proxy
+package docker_proxy
 
 import (
 	"context"

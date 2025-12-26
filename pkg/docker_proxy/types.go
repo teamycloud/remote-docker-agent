@@ -1,4 +1,4 @@
-package docker_api_proxy
+package docker_proxy
 
 // TransportType represents the type of transport to use for remote connections
 type TransportType string

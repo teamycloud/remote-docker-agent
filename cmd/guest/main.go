@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	commands_guest "github.com/teamycloud/tsctl/pkg/commands-guest"
+	commands_guest "github.com/teamycloud/tsctl/pkg/guest"
 )
 
 func main() {

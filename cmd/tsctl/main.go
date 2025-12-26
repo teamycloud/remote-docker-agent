@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/teamycloud/tsctl/pkg/commands-tsctl"
+	"github.com/teamycloud/tsctl/pkg/tsctl"
 )
 
 var rootCmd = &cobra.Command{
@@ -15,8 +15,8 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(commands_tsctl.NewStartCommand())
-	rootCmd.AddCommand(commands_tsctl.NewHostExecCommand())
+	rootCmd.AddCommand(tsctl.NewStartCommand())
+	rootCmd.AddCommand(tsctl.NewHostExecCommand())
 }
 
 func main() {

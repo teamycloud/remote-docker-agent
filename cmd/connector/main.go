@@ -7,7 +7,7 @@ import (
 	"syscall"
 
 	"github.com/sirupsen/logrus"
-	mtlsproxy "github.com/teamycloud/tsctl/pkg/mtls-proxy"
+	mtlsproxy "github.com/teamycloud/tsctl/pkg/connector"
 )
 
 func main() {
