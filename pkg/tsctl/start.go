@@ -2,12 +2,13 @@ package tsctl
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strconv"
 	"syscall"
 
-	"github.com/mutagen-io/mutagen/pkg/daemon"
+	"github.com/fsnotify/fsnotify"
 	"github.com/mutagen-io/mutagen/pkg/forwarding"
 	_ "github.com/mutagen-io/mutagen/pkg/forwarding/protocols/local"
 	_ "github.com/mutagen-io/mutagen/pkg/forwarding/protocols/ssh"
@@ -16,7 +17,8 @@ import (
 	_ "github.com/mutagen-io/mutagen/pkg/synchronization/protocols/local"
 	_ "github.com/mutagen-io/mutagen/pkg/synchronization/protocols/ssh"
 	"github.com/spf13/cobra"
-	"github.com/teamycloud/tsctl/pkg/docker-proxy"
+	"github.com/teamycloud/tsctl/pkg/daemon"
+	docker_proxy "github.com/teamycloud/tsctl/pkg/docker-proxy"
 	"github.com/teamycloud/tsctl/pkg/docker-proxy/types"
 
 	_ "github.com/teamycloud/tsctl/pkg/ts-tunnel/forwarding-protocol"
@@ -56,7 +58,7 @@ func NewStartCommand() *cobra.Command {
 			// Attempt to acquire the daemon lock and defer its release.
 			lock, err := daemon.AcquireLock()
 			if err != nil {
-				return fmt.Errorf("unable to acquire daemon lock: %w, tsctl daemon probably is already running", err)
+				return fmt.Errorf("unable to acquire lock for the daemon pid path: %w, tsctl daemon is probably already running", err)
 			}
 			defer lock.Release()
 
@@ -65,6 +67,11 @@ func NewStartCommand() *cobra.Command {
 			// smoothly, not mid-initialization.
 			signalTermination := make(chan os.Signal, 2)
 			signal.Notify(signalTermination, syscall.SIGINT, syscall.SIGTERM)
+
+			fileTermination := make(chan bool, 1)
+			if err := watchTerminationSignal(fileTermination, logger); err != nil {
+				return err
+			}
 
 			cfg := types.Config{
 				ListenAddr:    listenAddr,
@@ -94,7 +101,7 @@ func NewStartCommand() *cobra.Command {
 				}
 				cfg.TSInsecure = tsTunnelInsecure
 			} else {
-				panic("We need to connect to remote docker daemon by either SSH or ts-tunnel")
+				return fmt.Errorf("we need to connect to remote docker daemon by either SSH or ts-tunnel")
 			}
 
 			bannerFormat := `
@@ -106,13 +113,13 @@ Starting TCP proxy with %s transport...
 
 			forwardingManager, err := forwarding.NewManager(logger.Sublogger("port-forward"))
 			if err != nil {
-				panic(fmt.Sprintf("unable to create forwarding session manager: %v", err))
+				return fmt.Errorf("unable to create forwarding session manager: %v", err)
 			}
 			defer forwardingManager.Shutdown()
 
 			synchronizationManager, err := synchronization.NewManager(logger.Sublogger("file-sync"))
 			if err != nil {
-				panic(fmt.Sprintf("unable to create synchronization session manager: %v", err))
+				return fmt.Errorf("unable to create synchronization session manager: %v", err)
 			}
 			defer synchronizationManager.Shutdown()
 
@@ -120,14 +127,14 @@ Starting TCP proxy with %s transport...
 
 			proxy, err := docker_proxy.NewProxy(cfg, forwardingManager, synchronizationManager, logger.Sublogger("proxy"))
 			if err != nil {
-				log.Fatalf("Failed to create TCP proxy: %v", err)
+				return fmt.Errorf("failed to create TCP proxy: %v", err)
 			}
 			go func() {
 				errCh <- proxy.ListenAndServe()
 			}()
 
-			log.Println("Proxy started. Press Ctrl+C to stop.")
-			log.Printf("Use: export DOCKER_HOST=tcp://%s", cfg.ListenAddr)
+			logger.Info("Proxy started. Press Ctrl+C to stop.")
+			logger.Infof("Use: export DOCKER_HOST=tcp://%s", cfg.ListenAddr)
 
 			// Wait for termination from a signal, the daemon service, or the gRPC
 			// server. We treat termination via the daemon service as a non-error.
@@ -136,11 +143,16 @@ Starting TCP proxy with %s transport...
 				logger.Info("Terminating due to signal:", s)
 				proxy.Close()
 				return fmt.Errorf("terminated by signal: %s", s)
+			case <-fileTermination:
+				logger.Info("Terminating due to file signal")
+				proxy.Close()
+				return nil
 			case err = <-errCh:
 				logger.Error("Daemon server failure:", err)
 				return fmt.Errorf("daemon server termination: %w", err)
 			}
 		},
+		SilenceUsage: true,
 	}
 
 	// Add flags to the start command
@@ -158,4 +170,79 @@ Starting TCP proxy with %s transport...
 
 	cmd.Flags().StringVar(&logLevelFlag, "log-level", "info", "Log level")
 	return cmd
+}
+
+func watchTerminationSignal(fileTermination chan<- bool, logger *logging.Logger) error {
+	terminatePath, err := daemon.PidTerminatePath()
+	if err != nil {
+		return fmt.Errorf("unable to compute terminate file path: %w", err)
+	}
+
+	// Create a file watcher
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return fmt.Errorf("unable to create file watcher: %w", err)
+	}
+
+	// Watch the daemon directory for file creation events
+	daemonDir := filepath.Dir(terminatePath)
+	if err := watcher.Add(daemonDir); err != nil {
+		watcher.Close()
+		return fmt.Errorf("unable to watch daemon directory: %w", err)
+	}
+
+	logger.Infof("Watching for termination signal at: %s", terminatePath)
+
+	// Get current process PID
+	currentPid := os.Getpid()
+
+	// Start a goroutine to monitor file events
+	go func() {
+		defer watcher.Close()
+
+		for {
+			select {
+			case event, ok := <-watcher.Events:
+				if !ok {
+					logger.Info("File watcher events channel closed")
+					return
+				}
+
+				logger.Debugf("File event received: Op=%v, Name=%s", event.Op, event.Name)
+
+				// Check if the terminate file was created or written
+				if (event.Op&fsnotify.Create == fsnotify.Create || event.Op&fsnotify.Write == fsnotify.Write) &&
+					event.Name == terminatePath {
+					logger.Debugf("Terminate file detected, reading content...")
+					// Read the file content
+					if content, err := os.ReadFile(terminatePath); err == nil {
+						contentStr := string(content)
+						logger.Debugf("Terminate file content: '%s' (length: %d), current PID: %d", contentStr, len(contentStr), currentPid)
+						if pid, err := strconv.Atoi(contentStr); err == nil && pid == currentPid {
+							logger.Debugf("PID matches! Sending termination signal")
+							_ = os.Remove(terminatePath)
+							fileTermination <- true
+							return
+						} else {
+							if err != nil {
+								logger.Debugf("Failed to parse PID from content '%s': %v", contentStr, err)
+							} else {
+								logger.Debugf("PID mismatch: expected %d, got %d", currentPid, pid)
+							}
+						}
+					} else {
+						logger.Infof("Failed to read terminate file: %v", err)
+					}
+				}
+			case err, ok := <-watcher.Errors:
+				if !ok {
+					logger.Info("Terminate file watcher errors channel closed")
+					return
+				}
+				logger.Infof("Terminate file watcher error: %v", err)
+			}
+		}
+	}()
+
+	return nil
 }
