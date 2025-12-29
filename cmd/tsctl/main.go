@@ -15,9 +15,7 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	// todo: move start/stop as sub commands of daemon
-	rootCmd.AddCommand(tsctl.NewStartCommand())
-	rootCmd.AddCommand(tsctl.NewStopCommand())
+	rootCmd.AddCommand(tsctl.NewDaemonCommand())
 	rootCmd.AddCommand(tsctl.NewHostExecCommand())
 }
 
