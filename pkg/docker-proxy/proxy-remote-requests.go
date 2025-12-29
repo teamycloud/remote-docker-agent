@@ -201,3 +201,62 @@ func (p *DockerAPIProxy) isContainerStopped(containerID string) bool {
 
 	return isStopped
 }
+
+// listRunningContainers returns a map of all running container IDs on the remote host
+func (p *DockerAPIProxy) listRunningContainers() (map[string]bool, error) {
+	// Create a new connection to query container list
+	conn, err := p.dialRemote()
+	if err != nil {
+		return nil, fmt.Errorf("failed to dial remote Docker: %w", err)
+	}
+	defer conn.Close()
+
+	// Build the list request - only running containers
+	req, err := http.NewRequest("GET", "/containers/json?filters={\"status\":[\"running\"]}", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create container list request: %w", err)
+	}
+	req.Host = "docker.example.com"
+	req.Header.Set("User-Agent", "tsctl/1.0.0")
+
+	// Send the request
+	if err := req.Write(conn); err != nil {
+		return nil, fmt.Errorf("failed to send container list request: %w", err)
+	}
+
+	// Read the response
+	reader := bufio.NewReader(conn)
+	resp, err := http.ReadResponse(reader, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read container list response: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check response status
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("container list returned status %d", resp.StatusCode)
+	}
+
+	// Parse the response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read container list response body: %w", err)
+	}
+
+	// Parse JSON to get container IDs
+	var containers []struct {
+		Id string `json:"Id"`
+	}
+
+	if err := json.Unmarshal(body, &containers); err != nil {
+		return nil, fmt.Errorf("failed to parse container list response: %w", err)
+	}
+
+	// Build map of running container IDs
+	runningContainers := make(map[string]bool)
+	for _, container := range containers {
+		runningContainers[container.Id] = true
+	}
+
+	return runningContainers, nil
+}

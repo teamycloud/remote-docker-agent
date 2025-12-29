@@ -16,7 +16,7 @@ import (
 	"github.com/mutagen-io/mutagen/pkg/logging"
 	"github.com/mutagen-io/mutagen/pkg/prompting"
 	"github.com/mutagen-io/mutagen/pkg/synchronization"
-	"github.com/teamycloud/tsctl/pkg/docker-proxy/mutagen-bridge"
+	mutagen_bridge "github.com/teamycloud/tsctl/pkg/docker-proxy/mutagen-bridge"
 	"github.com/teamycloud/tsctl/pkg/docker-proxy/types"
 	ts_tunnel "github.com/teamycloud/tsctl/pkg/ts-tunnel"
 )
@@ -106,8 +106,8 @@ func NewProxy(cfg types.Config, forwardingManager *forwarding.Manager, synchroni
 		stopCh:           make(chan struct{}),
 	}
 
-	// Start goroutine to clean up orphaned sessions from previous runs
-	go proxy.cleanupOrphanedMutagenSessions()
+	// Setup sessions for all currently running containers on the remote
+	go proxy.syncWithRunningContainers()
 
 	return proxy, nil
 }
@@ -327,12 +327,8 @@ func (p *DockerAPIProxy) handleContainerOperationResponse(req *http.Request, res
 				containerID := matches[1]
 				p.logger.Tracef("Container start detected: %s", containerID)
 
-				if err := p.portForwardMgr.SetupForwards(containerID, p.promptIdentifier); err != nil {
-					p.logger.Warnf("Failed to setup port forwards for %s: %v", containerID, err)
-				}
-				if err := p.fileSyncMgr.SetupSyncs(containerID, p.promptIdentifier); err != nil {
-					p.logger.Warnf("Failed to setup file syncs for %s: %v", containerID, err)
-				}
+				// Setup sessions asynchronously, verifying container is actually running
+				go p.setupSessionsIfRunning(containerID)
 			}
 		}
 	}
@@ -523,6 +519,11 @@ func (p *DockerAPIProxy) Close() error {
 
 	p.wg.Wait()
 
+	// Teardown all port forwards and file syncs
+	p.logger.Infof("Tearing down all mutagen sessions...")
+	p.portForwardMgr.TeardownAll()
+	p.fileSyncMgr.TeardownAll()
+
 	if p.sshClient != nil {
 		if err := p.sshClient.Close(); err != nil {
 			p.logger.Infof("Error closing SSH client: %v", err)
@@ -532,62 +533,74 @@ func (p *DockerAPIProxy) Close() error {
 	return nil
 }
 
-// cleanupOrphanedMutagenSessions detects and removes port-forward and file-sync sessions
-// for containers that no longer exist or are not running on the remote host
-func (p *DockerAPIProxy) cleanupOrphanedMutagenSessions() {
-	p.logger.Infof("Starting cleanup of orphaned sessions from previous runs...")
+// syncWithRunningContainers pulls all running containers from remote and sets up sessions for them
+func (p *DockerAPIProxy) syncWithRunningContainers() {
+	p.logger.Infof("Syncing with running containers on remote...")
 
-	// Collect all unique container IDs from both managers
-	allContainerIDs := make(map[string]bool)
-
-	// Get all existing port forward sessions
-	portForwardSessions, err := p.portForwardMgr.ListSessions()
+	// Get all running containers from remote
+	runningContainers, err := p.listRunningContainers()
 	if err != nil {
-		p.logger.Warnf("Failed to list port forward sessions: %v", err)
-	} else {
-		p.logger.Debugf("Found %d existing port forward sessions", len(portForwardSessions))
-		for containerID := range portForwardSessions {
-			allContainerIDs[containerID] = true
-		}
-	}
-
-	// Get all existing file sync sessions
-	fileSyncSessions, err := p.fileSyncMgr.ListSessions()
-	if err != nil {
-		p.logger.Warnf("Failed to list file sync sessions: %v", err)
-	} else {
-		p.logger.Debugf("Found %d existing file sync sessions", len(fileSyncSessions))
-		for containerID := range fileSyncSessions {
-			allContainerIDs[containerID] = true
-		}
-	}
-
-	if len(allContainerIDs) == 0 {
-		p.logger.Debugf("No existing sessions found, cleanup completed")
+		p.logger.Warnf("Failed to list running containers: %v", err)
 		return
 	}
 
-	p.logger.Debugf("Found %d unique containers with active sessions", len(allContainerIDs))
+	p.logger.Infof("Found %d running containers on remote", len(runningContainers))
 
-	// Check running state for all containers in a single loop
-	containersToTeardown := make([]string, 0)
-	for containerID := range allContainerIDs {
-		if !p.isContainerRunning(containerID) {
-			p.logger.Debugf("Container %s is not running, will teardown sessions", containerID)
-			containersToTeardown = append(containersToTeardown, containerID)
-		} else {
-			p.logger.Debugf("Container %s is still running, keeping sessions", containerID)
-		}
+	// Get all existing sessions
+	existingPortForwardSessions, _ := p.portForwardMgr.ListSessions()
+	existingFileSyncSessions, _ := p.fileSyncMgr.ListSessions()
+
+	// Merge existing sessions
+	existingSessions := make(map[string]bool)
+	for containerID := range existingPortForwardSessions {
+		existingSessions[containerID] = true
+	}
+	for containerID := range existingFileSyncSessions {
+		existingSessions[containerID] = true
 	}
 
-	// Teardown sessions for all non-running containers
-	if len(containersToTeardown) > 0 {
-		p.logger.Debugf("Tearing down sessions for %d containers", len(containersToTeardown))
-		for _, containerID := range containersToTeardown {
+	// Teardown sessions for containers that are no longer running
+	for containerID := range existingSessions {
+		if !runningContainers[containerID] {
+			p.logger.Debugf("Container %s is no longer running, tearing down sessions", containerID)
 			p.portForwardMgr.TeardownForwards(containerID)
 			p.fileSyncMgr.TeardownSyncs(containerID)
 		}
 	}
 
-	p.logger.Debugf("Orphaned session cleanup completed")
+	// Setup sessions for running containers that don't have sessions yet
+	for containerID := range runningContainers {
+		if !existingSessions[containerID] {
+			p.logger.Debugf("Container %s is running but has no sessions, setting up", containerID)
+			// We know the container is running, so setup sessions directly without re-checking
+			go func(cID string) {
+				if err := p.portForwardMgr.SetupForwards(cID, p.promptIdentifier); err != nil {
+					p.logger.Warnf("Failed to setup port forwards for %s: %v", cID, err)
+				}
+				if err := p.fileSyncMgr.SetupSyncs(cID, p.promptIdentifier); err != nil {
+					p.logger.Warnf("Failed to setup file syncs for %s: %v", cID, err)
+				}
+			}(containerID)
+		}
+	}
+
+	p.logger.Debugf("Sync with running containers completed")
+}
+
+// setupSessionsIfRunning verifies the container is running and sets up sessions
+func (p *DockerAPIProxy) setupSessionsIfRunning(containerID string) {
+	// Verify the container is actually running by checking remote status
+	if !p.isContainerRunning(containerID) {
+		p.logger.Debugf("Container %s is not running, skipping session setup", containerID)
+		return
+	}
+
+	p.logger.Debugf("Setting up sessions for running container %s", containerID)
+
+	if err := p.portForwardMgr.SetupForwards(containerID, p.promptIdentifier); err != nil {
+		p.logger.Warnf("Failed to setup port forwards for %s: %v", containerID, err)
+	}
+	if err := p.fileSyncMgr.SetupSyncs(containerID, p.promptIdentifier); err != nil {
+		p.logger.Warnf("Failed to setup file syncs for %s: %v", containerID, err)
+	}
 }

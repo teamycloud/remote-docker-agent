@@ -545,17 +545,18 @@ func (m *PortForwardManager) TeardownAll() {
 			if binding.Listener != nil {
 				binding.Listener.Close()
 			}
-
-			selected := &selection.Selection{
-				All:            true,
-				Specifications: []string{},
-				LabelSelector:  "",
-			}
-			err := m.mutagenForwardMgr.Terminate(context.Background(), selected, "")
-			if err != nil {
-				m.logger.Infof("Error terminating port forwards: %s", err)
-			}
 		}
 		delete(m.containerPorts, containerID)
+	}
+
+	// Terminate all forwarding sessions
+	selected := &selection.Selection{
+		All:            true,
+		Specifications: []string{},
+		LabelSelector:  "",
+	}
+	err := m.mutagenForwardMgr.Terminate(context.Background(), selected, "")
+	if err != nil {
+		m.logger.Infof("Error terminating all port forwards: %s", err)
 	}
 }

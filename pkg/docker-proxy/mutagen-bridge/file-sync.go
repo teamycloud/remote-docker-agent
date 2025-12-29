@@ -850,9 +850,7 @@ func (m *FileSyncManager) TeardownSyncs(containerID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if _, exists := m.containerMounts[containerID]; exists {
-		delete(m.containerMounts, containerID)
-	}
+	delete(m.containerMounts, containerID)
 
 	m.logger.Infof("Tearing down file syncs for container %s", containerID)
 
@@ -907,15 +905,27 @@ func (m *FileSyncManager) TeardownAll() {
 	m.logger.Infof("Tearing down all file syncs")
 
 	for containerID := range m.containerMounts {
-		selected := &selection.Selection{
-			All:            false,
-			Specifications: []string{},
-			LabelSelector:  fmt.Sprintf("container-id=%s", compressContainerID(containerID)),
-		}
-		err := m.mutagenSyncMgr.Terminate(context.Background(), selected, "")
-		if err != nil {
-			m.logger.Infof("Error terminating sync sessions for container %s: %s", containerID, err)
-		}
 		delete(m.containerMounts, containerID)
 	}
+
+	// Terminate all sync sessions
+	selected := &selection.Selection{
+		All:            true,
+		Specifications: []string{},
+		LabelSelector:  "",
+	}
+	err := m.mutagenSyncMgr.Terminate(context.Background(), selected, "")
+	if err != nil {
+		m.logger.Infof("Error terminating all sync sessions: %s", err)
+	}
+}
+
+// TerminateAllSessions terminates all file sync sessions to ensure nothing remains on disk
+func (m *FileSyncManager) TerminateAllSessions() error {
+	selected := &selection.Selection{
+		All:            true,
+		Specifications: []string{},
+		LabelSelector:  "",
+	}
+	return m.mutagenSyncMgr.Terminate(context.Background(), selected, "")
 }
