@@ -86,7 +86,6 @@ func (p *DockerAPIProxy) handleContainerCreateRequest(req *http.Request) {
 	mounts := make([]string, 0)
 	if len(createReq.HostConfig.Binds) > 0 {
 		mounts = append(mounts, createReq.HostConfig.Binds...)
-		// insert SyncBasePath into the Binds
 	}
 	if len(createReq.HostConfig.Mounts) > 0 {
 		for _, mount := range createReq.HostConfig.Mounts {
@@ -98,7 +97,6 @@ func (p *DockerAPIProxy) handleContainerCreateRequest(req *http.Request) {
 				mounts = append(mounts, m)
 			}
 		}
-		// insert SyncBasePath into the Mounts
 	}
 
 	if len(mounts) > 0 {

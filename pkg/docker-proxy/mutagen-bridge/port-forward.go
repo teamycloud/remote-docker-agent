@@ -26,7 +26,7 @@ import (
 type PortBinding struct {
 	HostPort      string // Local port (e.g., "8080")
 	ContainerPort string // Container port with protocol (e.g., "80/tcp")
-	Protocol      string // tcp or udp
+	Protocol      string // tcp or udp, but mutagen does not support udp at the moment. See https://mutagen.io/documentation/forwarding/
 	Listener      net.Listener
 	SessionID     string
 	StopCh        chan struct{}
@@ -115,6 +115,53 @@ func (m *PortForwardManager) StorePortBindingsEnd(req *http.Request, containerID
 		}
 	}
 	delete(m.containers, req)
+}
+
+// StorePortBindingsForContainer stores port bindings directly for a container ID
+func (m *PortForwardManager) StorePortBindingsForContainer(containerID string, hostPorts map[string][]string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	bindings := make([]*PortBinding, 0)
+	for containerPort, hostPortList := range hostPorts {
+		if len(hostPortList) == 0 {
+			continue
+		}
+
+		// Extract protocol from container port (e.g., "80/tcp" -> "tcp")
+		parts := strings.Split(containerPort, "/")
+		port := containerPort
+		protocol := "tcp"
+		if len(parts) == 2 {
+			port = parts[0]
+			protocol = parts[1]
+		}
+
+		// Take all host port bindings
+		for _, hostPort := range hostPortList {
+			if hostPort == "" {
+				continue
+			}
+
+			binding := &PortBinding{
+				HostPort:      hostPort,
+				ContainerPort: port,
+				Protocol:      protocol,
+				StopCh:        make(chan struct{}),
+			}
+			bindings = append(bindings, binding)
+			m.logger.Debugf("Stored port binding for container %s: %s:%s -> %s/%s",
+				containerID, hostPort, port, port, protocol)
+		}
+	}
+
+	if len(bindings) > 0 {
+		containerPorts := &ContainerPorts{
+			ContainerID: containerID,
+			Bindings:    bindings,
+		}
+		m.containerPorts[containerID] = containerPorts
+	}
 }
 
 // SetupForwards sets up SSH port forwards for a container
@@ -228,7 +275,7 @@ func loadAndValidateGlobalForwardingConfiguration(path string) (*forwarding.Conf
 
 // setupSingleForward sets up a single SSH port forward
 func (m *PortForwardManager) setupSingleForward(containerID string, binding *PortBinding, promptIdentifier string) (string, error) {
-	pfCreateConfiguration.name = fmt.Sprintf("forward-%s-%s", containerID[:8], binding.HostPort)
+	pfCreateConfiguration.name = fmt.Sprintf("forward-%s-%s-%s", containerID[:8], "tcp", binding.HostPort) // mutagen does not support udp at the moment
 	pfCreateConfiguration.labels = nil
 	pfCreateConfiguration.paused = false
 	pfCreateConfiguration.noGlobalConfiguration = false

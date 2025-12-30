@@ -544,7 +544,7 @@ func (p *DockerAPIProxy) syncWithRunningContainers() {
 		return
 	}
 
-	p.logger.Infof("Found %d running containers on remote", len(runningContainers))
+	p.logger.Debugf("Found %d running containers on remote", len(runningContainers))
 
 	// Get all existing sessions
 	existingPortForwardSessions, _ := p.portForwardMgr.ListSessions()
@@ -561,7 +561,7 @@ func (p *DockerAPIProxy) syncWithRunningContainers() {
 
 	// Teardown sessions for containers that are no longer running
 	for containerID := range existingSessions {
-		if !runningContainers[containerID] {
+		if _, stillRunning := runningContainers[containerID]; !stillRunning {
 			p.logger.Debugf("Container %s is no longer running, tearing down sessions", containerID)
 			p.portForwardMgr.TeardownForwards(containerID)
 			p.fileSyncMgr.TeardownSyncs(containerID)
@@ -569,18 +569,15 @@ func (p *DockerAPIProxy) syncWithRunningContainers() {
 	}
 
 	// Setup sessions for running containers that don't have sessions yet
-	for containerID := range runningContainers {
+	for containerID, containerInfo := range runningContainers {
 		if !existingSessions[containerID] {
 			p.logger.Debugf("Container %s is running but has no sessions, setting up", containerID)
-			// We know the container is running, so setup sessions directly without re-checking
-			go func(cID string) {
-				if err := p.portForwardMgr.SetupForwards(cID, p.promptIdentifier); err != nil {
-					p.logger.Warnf("Failed to setup port forwards for %s: %v", cID, err)
+			// We already have all the container info, setup sessions directly
+			go func(cID string, info *ContainerInfo) {
+				if err := p.storeContainerBindingsAndSetupSessions(cID, info); err != nil {
+					p.logger.Warnf("Failed to setup sessions for %s: %v", cID, err)
 				}
-				if err := p.fileSyncMgr.SetupSyncs(cID, p.promptIdentifier); err != nil {
-					p.logger.Warnf("Failed to setup file syncs for %s: %v", cID, err)
-				}
-			}(containerID)
+			}(containerID, containerInfo)
 		}
 	}
 
@@ -603,4 +600,31 @@ func (p *DockerAPIProxy) setupSessionsIfRunning(containerID string) {
 	if err := p.fileSyncMgr.SetupSyncs(containerID, p.promptIdentifier); err != nil {
 		p.logger.Warnf("Failed to setup file syncs for %s: %v", containerID, err)
 	}
+}
+
+// storeContainerBindingsAndSetupSessions stores container bindings and sets up sessions
+func (p *DockerAPIProxy) storeContainerBindingsAndSetupSessions(containerID string, info *ContainerInfo) error {
+	p.logger.Debugf("Storing bindings for container %s", containerID)
+
+	p.logger.Debugf("Container %s has %d port bindings and %d mounts", containerID, len(info.PortBindings), len(info.Mounts))
+
+	// Store port bindings if any
+	if len(info.PortBindings) > 0 {
+		p.portForwardMgr.StorePortBindingsForContainer(containerID, info.PortBindings)
+	}
+
+	// Store bind mounts if any
+	if len(info.Mounts) > 0 {
+		p.fileSyncMgr.StoreBindMountsForContainer(containerID, info.Mounts)
+	}
+
+	// Now set up the sessions
+	if err := p.portForwardMgr.SetupForwards(containerID, p.promptIdentifier); err != nil {
+		p.logger.Warnf("Failed to setup port forwards for %s: %v", containerID, err)
+	}
+	if err := p.fileSyncMgr.SetupSyncs(containerID, p.promptIdentifier); err != nil {
+		p.logger.Warnf("Failed to setup file syncs for %s: %v", containerID, err)
+	}
+
+	return nil
 }

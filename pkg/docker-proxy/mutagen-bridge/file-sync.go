@@ -140,6 +140,70 @@ func (m *FileSyncManager) StoreBindMountsEnd(req *http.Request, containerID stri
 	delete(m.containers, req)
 }
 
+// StoreBindMountsForContainer stores bind mounts directly for a container ID
+func (m *FileSyncManager) StoreBindMountsForContainer(containerID string, binds []string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	mounts := make([]*BindMount, 0)
+	mountNameMap := make(map[string]*BindMount)
+	for _, bind := range binds {
+		// Parse bind mount syntax: /host/path:/container/path[:ro]
+		parts := strings.Split(bind, ":")
+		if len(parts) < 2 {
+			m.logger.Infof("Ignored invalid bind mount format: %s", bind)
+			continue
+		}
+
+		hostPath := parts[0]
+		containerPath := parts[1]
+		readOnly := false
+
+		if len(parts) >= 3 && parts[2] == "ro" {
+			readOnly = true
+		}
+
+		// Expand host path to absolute path
+		absHostPath, err := filepath.Abs(hostPath)
+		if err != nil {
+			m.logger.Infof("Ignored failure on resolving host path %s: %v", hostPath, err)
+			continue
+		}
+
+		// Check if the host path exists
+		if _, err := os.Stat(absHostPath); err != nil {
+			m.logger.Infof("Ignored non-existent host path: %s", absHostPath)
+			continue
+		}
+
+		if existing, ok := mountNameMap[absHostPath]; ok {
+			if existing.ReadOnly && !readOnly {
+				existing.ReadOnly = false
+			}
+
+			// for one host path, we at most setup one sync
+			continue
+		}
+
+		mount := &BindMount{
+			HostPath:      absHostPath,
+			ContainerPath: containerPath,
+			ReadOnly:      readOnly,
+		}
+		mountNameMap[absHostPath] = mount
+		mounts = append(mounts, mount)
+		m.logger.Debugf("Stored bind mount for container %s: %s -> %s (ro=%v)", containerID, absHostPath, containerPath, readOnly)
+	}
+
+	if len(mounts) > 0 {
+		containerMounts := &ContainerMounts{
+			ContainerID: containerID,
+			Mounts:      mounts,
+		}
+		m.containerMounts[containerID] = containerMounts
+	}
+}
+
 // GetMounts returns all the mounts for a container
 func (m *FileSyncManager) GetMounts(key *http.Request) *ContainerMounts {
 	m.mu.Lock()

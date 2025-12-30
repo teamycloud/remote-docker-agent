@@ -7,6 +7,10 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"strings"
+
+	mutagen_bridge "github.com/teamycloud/tsctl/pkg/docker-proxy/mutagen-bridge"
 )
 
 // getContainerID fetches the full container ID from Docker API given a name or short ID
@@ -202,8 +206,15 @@ func (p *DockerAPIProxy) isContainerStopped(containerID string) bool {
 	return isStopped
 }
 
-// listRunningContainers returns a map of all running container IDs on the remote host
-func (p *DockerAPIProxy) listRunningContainers() (map[string]bool, error) {
+// ContainerInfo holds container details including bindings
+type ContainerInfo struct {
+	ID           string
+	PortBindings map[string][]string
+	Mounts       []string
+}
+
+// listRunningContainers returns details of all running containers on the remote host
+func (p *DockerAPIProxy) listRunningContainers() (map[string]*ContainerInfo, error) {
 	// Create a new connection to query container list
 	conn, err := p.dialRemote()
 	if err != nil {
@@ -211,7 +222,7 @@ func (p *DockerAPIProxy) listRunningContainers() (map[string]bool, error) {
 	}
 	defer conn.Close()
 
-	// Build the list request - only running containers
+	// Build the list request - only running containers with size info to get mounts
 	req, err := http.NewRequest("GET", "/containers/json?filters={\"status\":[\"running\"]}", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create container list request: %w", err)
@@ -243,19 +254,68 @@ func (p *DockerAPIProxy) listRunningContainers() (map[string]bool, error) {
 		return nil, fmt.Errorf("failed to read container list response body: %w", err)
 	}
 
-	// Parse JSON to get container IDs
+	// Parse JSON to get container details
 	var containers []struct {
-		Id string `json:"Id"`
+		Id    string `json:"Id"`
+		Ports []struct {
+			IP          string `json:"IP"`
+			PrivatePort int    `json:"PrivatePort"`
+			PublicPort  int    `json:"PublicPort"`
+			Type        string `json:"Type"`
+		} `json:"Ports"`
+		Mounts []struct {
+			Type        string `json:"Type"`
+			Source      string `json:"Source"`
+			Destination string `json:"Destination"`
+			Mode        string `json:"Mode"`
+			RW          bool   `json:"RW"`
+		} `json:"Mounts"`
 	}
 
 	if err := json.Unmarshal(body, &containers); err != nil {
 		return nil, fmt.Errorf("failed to parse container list response: %w", err)
 	}
 
-	// Build map of running container IDs
-	runningContainers := make(map[string]bool)
+	// Build map of running container details
+	runningContainers := make(map[string]*ContainerInfo)
 	for _, container := range containers {
-		runningContainers[container.Id] = true
+		info := &ContainerInfo{
+			ID:           container.Id,
+			PortBindings: make(map[string][]string),
+			Mounts:       make([]string, 0),
+		}
+
+		// Extract port bindings
+		for _, port := range container.Ports {
+			if port.PublicPort > 0 {
+				containerPort := fmt.Sprintf("%d/%s", port.PrivatePort, port.Type)
+				hostPort := fmt.Sprintf("%d", port.PublicPort)
+				info.PortBindings[containerPort] = append(info.PortBindings[containerPort], hostPort)
+			}
+		}
+
+		// Extract bind mounts
+		for _, mount := range container.Mounts {
+			if mount.Type == "bind" {
+				// Mount source may have SyncBasePath prefix - extract original local path
+				localPath := mount.Source
+				if strings.HasPrefix(mount.Source, mutagen_bridge.SyncBasePath) {
+					localPath = strings.TrimPrefix(mount.Source, mutagen_bridge.SyncBasePath)
+				}
+
+				// Check if the local path exists on disk
+				if _, err := os.Stat(localPath); err == nil {
+					// Build mount string in the format: localPath:containerPath[:ro]
+					mountStr := fmt.Sprintf("%s:%s", localPath, mount.Destination)
+					if !mount.RW {
+						mountStr = fmt.Sprintf("%s:ro", mountStr)
+					}
+					info.Mounts = append(info.Mounts, mountStr)
+				}
+			}
+		}
+
+		runningContainers[container.Id] = info
 	}
 
 	return runningContainers, nil
