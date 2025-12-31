@@ -19,13 +19,13 @@ const (
 	ClientID = "tsctl"
 
 	// Scope is the OAuth2 scope for login
-	Scope = "openapi hosts"
+	Scope = "openid openapi hosts"
 
 	// EnvLoginEndpoint is the environment variable for login endpoint
-	EnvLoginEndpoint = "TINYSCALE_LOGIN_ENDPOINT"
+	EnvLoginEndpoint = "TINYSCALE_ENDPOINT_LOGIN"
 
 	// EnvOpenAPIEndpoint is the environment variable for OpenAPI endpoint
-	EnvOpenAPIEndpoint = "TINYSCALE_OPENAPI_ENDPOINT"
+	EnvOpenAPIEndpoint = "TINYSCALE_ENDPOINT_OPENAPI"
 
 	// DeviceAuthorizationPath is the OAuth2 device authorization endpoint path
 	DeviceAuthorizationPath = "/device_authorization"
