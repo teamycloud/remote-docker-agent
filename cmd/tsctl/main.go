@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/teamycloud/tsctl/pkg/tsctl"
+	"github.com/teamycloud/tsctl/pkg/tsctl/auth"
 )
 
 var rootCmd = &cobra.Command{
@@ -17,6 +18,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(tsctl.NewDaemonCommand())
 	rootCmd.AddCommand(tsctl.NewHostExecCommand())
+	rootCmd.AddCommand(auth.NewAuthCommand())
 }
 
 func main() {
