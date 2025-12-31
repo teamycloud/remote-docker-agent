@@ -33,26 +33,26 @@ func runLogin(cmd *cobra.Command, args []string) error {
 
 	// Step 1: Start device authorization
 	oauthClient := NewOAuthClient(authEndpoint)
-	authResp, err := oauthClient.StartDeviceAuthorization()
+	deviceAuth, err := oauthClient.StartDeviceAuthorization()
 	if err != nil {
 		return fmt.Errorf("failed to start device authorization: %w", err)
 	}
 
 	// Step 2: Display verification info to user
 	fmt.Printf("To sign in, use a web browser to open the page:\n")
-	fmt.Printf("  %s\n\n", authResp.VerificationURI)
+	fmt.Printf("  %s\n\n", deviceAuth.VerificationURI)
 	fmt.Printf("And enter the code:\n")
-	fmt.Printf("  %s\n\n", authResp.UserCode)
+	fmt.Printf("  %s\n\n", deviceAuth.UserCode)
 
-	if authResp.VerificationURIComplete != "" {
+	if deviceAuth.VerificationURIComplete != "" {
 		fmt.Printf("Or open this URL directly:\n")
-		fmt.Printf("  %s\n\n", authResp.VerificationURIComplete)
+		fmt.Printf("  %s\n\n", deviceAuth.VerificationURIComplete)
 	}
 
 	fmt.Printf("Waiting for authentication...\n")
 
 	// Step 3: Poll for token
-	tokenResp, err := oauthClient.PollForToken(authResp.DeviceCode, authResp.Interval, authResp.ExpiresIn)
+	tokenResp, err := oauthClient.PollForToken(deviceAuth)
 	if err != nil {
 		return fmt.Errorf("failed to complete authentication: %w", err)
 	}

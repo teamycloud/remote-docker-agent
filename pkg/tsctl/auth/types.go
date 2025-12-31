@@ -42,16 +42,6 @@ type Organization struct {
 	Subscription string `json:"subscription"`
 }
 
-// DeviceAuthorizationResponse represents the OAuth2 device authorization response
-type DeviceAuthorizationResponse struct {
-	DeviceCode              string `json:"device_code"`
-	UserCode                string `json:"user_code"`
-	VerificationURI         string `json:"verification_uri"`
-	VerificationURIComplete string `json:"verification_uri_complete,omitempty"`
-	ExpiresIn               int    `json:"expires_in"`
-	Interval                int    `json:"interval"`
-}
-
 // TokenResponse represents the OAuth2 token response
 type TokenResponse struct {
 	AccessToken  string `json:"access_token"`
@@ -60,12 +50,6 @@ type TokenResponse struct {
 	RefreshToken string `json:"refresh_token,omitempty"`
 	IDToken      string `json:"id_token,omitempty"`
 	Scope        string `json:"scope,omitempty"`
-}
-
-// TokenErrorResponse represents an OAuth2 error response during token polling
-type TokenErrorResponse struct {
-	Error            string `json:"error"`
-	ErrorDescription string `json:"error_description,omitempty"`
 }
 
 // IDTokenClaims represents the claims in the JWT id_token

@@ -1,185 +1,96 @@
 package auth
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
-	"strings"
-	"time"
+
+	"golang.org/x/oauth2"
 )
 
-// OAuthClient handles OAuth2 device code flow
+// OAuthClient handles OAuth2 device code flow using golang.org/x/oauth2
 type OAuthClient struct {
-	httpClient   *http.Client
+	config       *oauth2.Config
 	authEndpoint string
 }
 
-// NewOAuthClient creates a new OAuth client
+// NewOAuthClient creates a new OAuth client using the standard golang.org/x/oauth2 library
 func NewOAuthClient(authEndpoint string) *OAuthClient {
-	return &OAuthClient{
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+	config := &oauth2.Config{
+		ClientID: ClientID,
+		Endpoint: oauth2.Endpoint{
+			DeviceAuthURL: authEndpoint + DeviceAuthorizationPath,
+			TokenURL:      authEndpoint + TokenPath,
 		},
+		Scopes: []string{"openapi", "hosts"},
+	}
+
+	return &OAuthClient{
+		config:       config,
 		authEndpoint: authEndpoint,
 	}
 }
 
 // StartDeviceAuthorization initiates the device authorization flow
-func (c *OAuthClient) StartDeviceAuthorization() (*DeviceAuthorizationResponse, error) {
-	endpoint := c.authEndpoint + DeviceAuthorizationPath
+// Returns the device authorization response from the OAuth2 library
+func (c *OAuthClient) StartDeviceAuthorization() (*oauth2.DeviceAuthResponse, error) {
+	ctx := context.Background()
 
-	data := url.Values{}
-	data.Set("client_id", ClientID)
-	data.Set("scope", Scope)
-
-	req, err := http.NewRequest("POST", endpoint, strings.NewReader(data.Encode()))
+	deviceAuth, err := c.config.DeviceAuth(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create device authorization request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("unable to send device authorization request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("unable to read device authorization response: %w", err)
+		return nil, fmt.Errorf("unable to start device authorization: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("device authorization failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var authResp DeviceAuthorizationResponse
-	if err := json.Unmarshal(body, &authResp); err != nil {
-		return nil, fmt.Errorf("unable to parse device authorization response: %w", err)
-	}
-
-	return &authResp, nil
+	return deviceAuth, nil
 }
 
 // PollForToken polls the token endpoint until authorization is complete, expired, or failed
-func (c *OAuthClient) PollForToken(deviceCode string, interval int, expiresIn int) (*TokenResponse, error) {
-	endpoint := c.authEndpoint + TokenPath
+func (c *OAuthClient) PollForToken(deviceAuth *oauth2.DeviceAuthResponse) (*TokenResponse, error) {
+	ctx := context.Background()
 
-	pollInterval := time.Duration(interval) * time.Second
-	if pollInterval < 5*time.Second {
-		pollInterval = 5 * time.Second
-	}
-
-	deadline := time.Now().Add(time.Duration(expiresIn) * time.Second)
-
-	for time.Now().Before(deadline) {
-		tokenResp, shouldRetry, err := c.requestToken(endpoint, deviceCode)
-		if err != nil {
-			return nil, err
-		}
-		if tokenResp != nil {
-			return tokenResp, nil
-		}
-		if !shouldRetry {
-			return nil, fmt.Errorf("authorization was denied")
-		}
-
-		time.Sleep(pollInterval)
-	}
-
-	return nil, fmt.Errorf("device authorization expired")
-}
-
-// requestToken makes a single token request
-// Returns (token, shouldRetry, error)
-func (c *OAuthClient) requestToken(endpoint, deviceCode string) (*TokenResponse, bool, error) {
-	data := url.Values{}
-	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
-	data.Set("device_code", deviceCode)
-	data.Set("client_id", ClientID)
-
-	req, err := http.NewRequest("POST", endpoint, strings.NewReader(data.Encode()))
+	token, err := c.config.DeviceAccessToken(ctx, deviceAuth)
 	if err != nil {
-		return nil, false, fmt.Errorf("unable to create token request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, false, fmt.Errorf("unable to send token request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, false, fmt.Errorf("unable to read token response: %w", err)
+		return nil, fmt.Errorf("failed to obtain token: %w", err)
 	}
 
-	if resp.StatusCode == http.StatusOK {
-		var tokenResp TokenResponse
-		if err := json.Unmarshal(body, &tokenResp); err != nil {
-			return nil, false, fmt.Errorf("unable to parse token response: %w", err)
-		}
-		return &tokenResp, false, nil
+	// Extract id_token from the extra fields
+	idToken, ok := token.Extra("id_token").(string)
+	if !ok || idToken == "" {
+		return nil, fmt.Errorf("id_token not found in token response - check OAuth provider configuration")
 	}
 
-	// Check for pending/slow_down errors
-	var errResp TokenErrorResponse
-	if err := json.Unmarshal(body, &errResp); err != nil {
-		return nil, false, fmt.Errorf("token request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	switch errResp.Error {
-	case "authorization_pending":
-		return nil, true, nil // Continue polling
-	case "slow_down":
-		// Increase interval (handled by caller sleeping longer)
-		return nil, true, nil
-	case "access_denied":
-		return nil, false, fmt.Errorf("authorization denied by user")
-	case "expired_token":
-		return nil, false, fmt.Errorf("device code expired")
-	default:
-		return nil, false, fmt.Errorf("token request failed: %s - %s", errResp.Error, errResp.ErrorDescription)
-	}
+	return &TokenResponse{
+		AccessToken:  token.AccessToken,
+		TokenType:    token.TokenType,
+		RefreshToken: token.RefreshToken,
+		IDToken:      idToken,
+	}, nil
 }
 
 // RefreshToken uses a refresh token to obtain a new id_token
 func (c *OAuthClient) RefreshToken(refreshToken string) (*TokenResponse, error) {
-	endpoint := c.authEndpoint + TokenPath
+	ctx := context.Background()
 
-	data := url.Values{}
-	data.Set("grant_type", "refresh_token")
-	data.Set("refresh_token", refreshToken)
-	data.Set("client_id", ClientID)
+	// Create a token source from the refresh token
+	token := &oauth2.Token{
+		RefreshToken: refreshToken,
+	}
 
-	req, err := http.NewRequest("POST", endpoint, strings.NewReader(data.Encode()))
+	tokenSource := c.config.TokenSource(ctx, token)
+	newToken, err := tokenSource.Token()
 	if err != nil {
-		return nil, fmt.Errorf("unable to create refresh token request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("unable to send refresh token request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("unable to read refresh token response: %w", err)
+		return nil, fmt.Errorf("unable to refresh token: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("refresh token request failed with status %d: %s", resp.StatusCode, string(body))
+	// Extract id_token from the extra fields
+	idToken, ok := newToken.Extra("id_token").(string)
+	if !ok || idToken == "" {
+		return nil, fmt.Errorf("id_token not found in refresh response - check OAuth provider configuration")
 	}
 
-	var tokenResp TokenResponse
-	if err := json.Unmarshal(body, &tokenResp); err != nil {
-		return nil, fmt.Errorf("unable to parse refresh token response: %w", err)
-	}
-
-	return &tokenResp, nil
+	return &TokenResponse{
+		AccessToken:  newToken.AccessToken,
+		TokenType:    newToken.TokenType,
+		RefreshToken: newToken.RefreshToken,
+		IDToken:      idToken,
+	}, nil
 }
